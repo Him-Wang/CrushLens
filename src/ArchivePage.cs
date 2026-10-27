@@ -233,7 +233,7 @@ namespace CrushLens
             g.SmoothingMode = SmoothingMode.AntiAlias;
             RectangleF card = new RectangleF(0, 0, Width, Height - 8);
             Ui.Card(g, card, 13f, _hover ? Color.FromArgb(255, 252, 251) : Palette.Card, _hover ? Color.FromArgb(232, 210, 210) : Palette.Line);
-            int score = Session.Report != null ? Session.Report.Score : 0;
+            int score = Session.Report != null ? Scoring.GetScore(Session.Report) : 0;
             Rectangle badge = new Rectangle(18, 20, 58, 58);
             Ui.FillRound(g, badge, 12f, Ui.ScoreSoft(score));
             TextRenderer.DrawText(g, score.ToString(), new Font(Theme.FontFamily, 18f, FontStyle.Bold),
@@ -246,7 +246,10 @@ namespace CrushLens
             Rectangle stage = new Rectangle(92, 42, 56, 19);
             Ui.Pill(g, stage, Session.Stage, Theme.Tiny, Palette.BgDeep, Palette.Muted);
             string date = Session.UpdatedAt > 0 ? Fmt.Ago(Session.UpdatedAt) : Fmt.ShortDate(Session.CreatedAt);
-            TextRenderer.DrawText(g, date + "  ·  " + Session.Messages.Count + " 条消息  ·  " + (Session.Report != null ? Session.Report.Label : ""),
+            string countText = Session.Messages.Count > 0
+                ? Session.Messages.Count + " 条消息"
+                : (Session.Media != null && Session.Media.Count > 0 ? "仅图片 · " + Session.Media.Count + " 张" : "0 条消息");
+            TextRenderer.DrawText(g, date + "  ·  " + countText + "  ·  " + (Session.Report != null ? Session.Report.Label : ""),
                 Theme.Tiny, new Rectangle(156, 42, Width - 300, 20), Palette.Muted,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
             string preview = Session.Report != null ? Session.Report.Headline : "";

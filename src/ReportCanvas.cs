@@ -137,6 +137,19 @@ namespace CrushLens
 
                 Add("dimensions", ref y, 242);
 
+                if (_report.MediaNotes.Count > 0)
+                {
+                    int mediaH = 50;
+                    for (int i = 0; i < _report.MediaNotes.Count; i++)
+                    {
+                        MediaNote n = _report.MediaNotes[i];
+                        int dh = Ui.Measure(g, n.Description, Theme.Small, width - 66, Ui.Wrap).Height;
+                        int sh = string.IsNullOrEmpty(n.Signal) ? 0 : Ui.Measure(g, n.Signal, Theme.Tiny, width - 66, Ui.Wrap).Height + 8;
+                        mediaH += Math.Max(34, dh + sh + 16);
+                    }
+                    Add("media", ref y, Math.Max(96, mediaH + 8));
+                }
+
                 int signalsH = 50;
                 for (int i = 0; i < _report.Signals.Count; i++)
                 {
@@ -202,6 +215,7 @@ namespace CrushLens
                 if (s.Kind == "score") PaintScore(g, card);
                 else if (s.Kind == "summary") PaintSummary(g, card);
                 else if (s.Kind == "dimensions") PaintDimensions(g, card);
+                else if (s.Kind == "media") PaintMedia(g, card);
                 else if (s.Kind == "signals") PaintSignals(g, card);
                 else if (s.Kind == "cautions") PaintCautions(g, card);
                 else if (s.Kind == "reply") PaintReply(g, card);
@@ -300,18 +314,19 @@ namespace CrushLens
                 Ui.Pill(g, demo, "示例报告", Theme.Tiny, Palette.BgDeep, Palette.Muted);
             }
 
+            int score = Scoring.GetScore(_report);
             float ringX = card.X + 22;
             float ringY = card.Y + 52;
             float ring = 104;
             using (Pen track = new Pen(Palette.BgDeep, 9f)) g.DrawEllipse(track, ringX, ringY, ring, ring);
-            Color sc = Ui.ScoreColor(_report.Score);
+            Color sc = Ui.ScoreColor(score);
             using (Pen arc = new Pen(sc, 9f))
             {
                 arc.StartCap = LineCap.Round;
                 arc.EndCap = LineCap.Round;
-                g.DrawArc(arc, ringX, ringY, ring, ring, 135, 270f * _report.Score / 100f);
+                g.DrawArc(arc, ringX, ringY, ring, ring, 135, 270f * score / 100f);
             }
-            TextRenderer.DrawText(g, _report.Score.ToString(), Theme.Score,
+            TextRenderer.DrawText(g, score.ToString(), Theme.Score,
                 new Rectangle((int)ringX, (int)ringY + 22, (int)ring, 50), sc, Ui.Center);
             TextRenderer.DrawText(g, "/ 100", Theme.Tiny,
                 new Rectangle((int)ringX, (int)ringY + 68, (int)ring, 16), Palette.Muted, Ui.Center);
@@ -321,13 +336,13 @@ namespace CrushLens
             int rx = (int)card.X + 150;
             int rw = (int)card.Width - 170;
             Rectangle trend = new Rectangle(rx, (int)card.Y + 48, 78, 24);
-            Ui.Pill(g, trend, Ui.TrendArrow(_report.Trend) + " " + _report.Trend, Theme.Tiny, Ui.ScoreSoft(_report.Score), sc);
+            Ui.Pill(g, trend, Ui.TrendArrow(_report.Trend) + " " + _report.Trend, Theme.Tiny, Ui.ScoreSoft(score), sc);
             TextRenderer.DrawText(g, _report.Label, Theme.H2, new Rectangle(rx, (int)card.Y + 80, rw, 30), Palette.Ink,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
             TextRenderer.DrawText(g, _report.Headline, Theme.MediumBold, new Rectangle(rx, (int)card.Y + 116, rw, 48),
                 Palette.InkSoft, TextFormatFlags.Left | TextFormatFlags.WordBreak | TextFormatFlags.NoPadding);
-            string meta = _report.AnalyzedAt > 0 ? Fmt.Ago(_report.AnalyzedAt) + "生成" : "刚刚生成";
-            if (_report.MessageTags.Count > 0) meta += " · 标注 " + _report.MessageTags.Count + " 条";
+            string meta = Scoring.Explain(_report) + " · " + (_report.AnalyzedAt > 0 ? Fmt.Ago(_report.AnalyzedAt) + "生成" : "刚刚生成");
+            if (_report.MediaNotes.Count > 0) meta += " · 图 " + _report.MediaNotes.Count;
             TextRenderer.DrawText(g, meta, Theme.Tiny, new Rectangle(rx, (int)card.Y + 174, rw, 18), Palette.Muted,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
 
@@ -359,7 +374,7 @@ namespace CrushLens
             for (int i = 0; i < keys.Length; i++)
             {
                 int val = 0;
-                if (!_report.Dimensions.TryGetValue(keys[i], out val)) val = _report.Score;
+                if (!_report.Dimensions.TryGetValue(keys[i], out val)) val = Scoring.GetScore(_report);
                 TextRenderer.DrawText(g, labels[i], Theme.Small, new Rectangle((int)card.X + 20, y, 66, 22), Palette.InkSoft,
                     TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
                 int bx = (int)card.X + 88;
@@ -369,6 +384,33 @@ namespace CrushLens
                 TextRenderer.DrawText(g, val.ToString(), Theme.Tiny, new Rectangle(bx + bw + 8, y, 32, 22), Palette.Muted,
                     TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
                 y += 29;
+            }
+        }
+
+        private void PaintMedia(Graphics g, RectangleF card)
+        {
+            TextRenderer.DrawText(g, "图片 / 表情包解读  /  VISUALS", Theme.Tiny,
+                new Rectangle((int)card.X + 20, (int)card.Y + 16, (int)card.Width - 40, 20), Palette.Blue,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            int y = (int)card.Y + 44;
+            for (int i = 0; i < _report.MediaNotes.Count; i++)
+            {
+                MediaNote n = _report.MediaNotes[i];
+                Ui.FillRound(g, new RectangleF(card.X + 20, y + 1, 22, 18), 6f, Palette.BlueSoft);
+                TextRenderer.DrawText(g, "图" + n.I, Theme.Tiny, new Rectangle((int)card.X + 20, y + 1, 22, 18), Palette.Blue, Ui.Center);
+                int dh = Ui.Measure(g, n.Description, Theme.Small, (int)card.Width - 66, Ui.Wrap).Height;
+                TextRenderer.DrawText(g, n.Description, Theme.Small,
+                    new Rectangle((int)card.X + 50, y, (int)card.Width - 70, dh), Palette.InkSoft, Ui.Wrap);
+                y += Math.Max(26, dh + 4);
+                if (!string.IsNullOrEmpty(n.Signal))
+                {
+                    int sh = Ui.Measure(g, n.Signal, Theme.Tiny, (int)card.Width - 70, Ui.Wrap).Height;
+                    Ui.FillRound(g, new RectangleF(card.X + 50, y + 2, card.Width - 70, sh + 8), 6f, Palette.BlueSoft);
+                    TextRenderer.DrawText(g, n.Signal, Theme.Tiny,
+                        new Rectangle((int)card.X + 58, y + 5, (int)card.Width - 86, sh), Palette.Blue, Ui.Wrap);
+                    y += sh + 14;
+                }
+                y += 10;
             }
         }
 
@@ -439,7 +481,7 @@ namespace CrushLens
 
             int y = (int)card.Y + 48;
             Color gradeColor = GradeColor(_report.ReplyGrade);
-            Ui.FillRound(g, new RectangleF(card.X + 20, y, 48, 48), 12f, Ui.ScoreSoft(_report.Score));
+            Ui.FillRound(g, new RectangleF(card.X + 20, y, 48, 48), 12f, Ui.ScoreSoft(Scoring.GetScore(_report)));
             TextRenderer.DrawText(g, _report.ReplyGrade, new Font(Theme.FontFamily, 18f, FontStyle.Bold),
                 new Rectangle((int)card.X + 20, y, 48, 48), gradeColor, Ui.Center);
             TextRenderer.DrawText(g, "回复表现", Theme.SmallBold,

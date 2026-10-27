@@ -27,13 +27,13 @@ namespace CrushLens
 
         protected override void Recalc()
         {
-            if (_stats == null) SetContentHeight(ClientSize.Height);
+            if (_stats == null || _stats.Total == 0) SetContentHeight(ClientSize.Height);
             else SetContentHeight(630);
         }
 
         protected override void PaintContent(Graphics g)
         {
-            if (_stats == null || _session == null)
+            if (_stats == null || _session == null || _stats.Total == 0)
             {
                 PaintEmpty(g);
                 return;
@@ -296,8 +296,12 @@ namespace CrushLens
             using (GraphicsPath hp = Ui.Heart(new RectangleF(w / 2f - 15, 86, 30, 26)))
             using (SolidBrush b = new SolidBrush(Color.FromArgb(246, 213, 218)))
                 g.FillPath(b, hp);
-            TextRenderer.DrawText(g, "还没有可以看的对话", Theme.H2, new Rectangle(0, 164, w, 30), Palette.Ink, Ui.Center);
-            TextRenderer.DrawText(g, "完成一次分析后，这里会出现双方的消息量、回复节奏、\n主动性与高频词。全部由本地计算，不额外调用 API。", Theme.Small,
+            bool imageOnly = _session != null && _session.Media != null && _session.Media.Count > 0;
+            TextRenderer.DrawText(g, imageOnly ? "这次只有图片" : "还没有可以看的对话", Theme.H2,
+                new Rectangle(0, 164, w, 30), Palette.Ink, Ui.Center);
+            TextRenderer.DrawText(g, imageOnly
+                    ? "这份档案没有可计算的文字统计。\n回到分析台查看视觉报告和逐图解读。"
+                    : "完成一次分析后，这里会出现双方的消息量、回复节奏、\n主动性与高频词。全部由本地计算，不额外调用 API。", Theme.Small,
                 new Rectangle(24, 202, w - 48, 50), Palette.Muted, Ui.WrapCenter);
         }
     }

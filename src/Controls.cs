@@ -693,7 +693,7 @@ namespace CrushLens
             DrawGear(g, new Rectangle(sr.X + 10, sr.Y + 11, 16, 16), Palette.SidebarMuted);
             TextRenderer.DrawText(g, "设置", Theme.Small, new Rectangle(sr.X + 34, sr.Y, 80, sr.Height), Palette.SidebarMuted,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            TextRenderer.DrawText(g, "v1.0 · portable", Theme.Tiny, new Rectangle(sr.X + 100, sr.Y, sr.Width - 110, sr.Height),
+            TextRenderer.DrawText(g, "v1.1 · portable", Theme.Tiny, new Rectangle(sr.X + 100, sr.Y, sr.Width - 110, sr.Height),
                 Color.FromArgb(109, 91, 101), TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         }
 

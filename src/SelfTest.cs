@@ -32,6 +32,14 @@ namespace CrushLens
                 check(session.Stats.ActiveDays > 3, "active days", session.Stats.ActiveDays.ToString());
                 check(session.Stats.MineAvgChars > 2, "avg chars", session.Stats.MineAvgChars.ToString("0.0"));
                 check(session.Report != null && session.Report.Score == 82, "demo report", session.Report != null ? session.Report.Score.ToString() : "null");
+                System.Collections.Generic.Dictionary<string, int> dims = new System.Collections.Generic.Dictionary<string, int>();
+                dims["initiative"] = 78;
+                dims["engagement"] = 70;
+                dims["care"] = 68;
+                dims["openness"] = 55;
+                dims["intimacy"] = 75;
+                dims["action"] = 40;
+                check(Scoring.FromDimensions(dims, 72) == 65, "score calibration", Scoring.FromDimensions(dims, 72).ToString());
 
                 string json = Json.Serialize(session);
                 ChatSession back = Json.Deserialize<ChatSession>(json);

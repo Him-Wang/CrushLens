@@ -105,7 +105,7 @@ namespace CrushLens
             int x = 24;
             int cw = _card.Width - 48;
 
-            Label intro = MakeLabel("填入平台提供的 Base URL、模型 ID 和 API Key。保存后立即生效；分析时会直接向你填写的地址发起请求。", Theme.Small, Palette.InkSoft);
+            Label intro = MakeLabel("填入 Base URL、模型 ID 和 API Key。附加图片需要模型支持视觉输入；普通文本模型只能处理文字。", Theme.Small, Palette.InkSoft);
             intro.SetBounds(x, 20, cw, 36);
             _card.Controls.Add(intro);
 

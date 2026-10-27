@@ -12,7 +12,8 @@ namespace CrushLens
             if (s == null || s.Report == null) throw new InvalidOperationException("没有可导出的报告。");
             AiReport r = s.Report;
             LocalStats st = s.Stats ?? StatsEngine.Compute(s.Messages, s.MeName, s.CrushName);
-            string scoreColor = r.Score >= 75 ? "#d9546d" : (r.Score >= 55 ? "#b78038" : "#5c7f9f");
+            int finalScore = Scoring.GetScore(r);
+            string scoreColor = finalScore >= 75 ? "#d9546d" : (finalScore >= 55 ? "#b78038" : "#5c7f9f");
             StringBuilder b = new StringBuilder();
             b.AppendLine("<!DOCTYPE html>");
             b.AppendLine("<html lang=\"zh-CN\"><head><meta charset=\"utf-8\"/>");
@@ -36,9 +37,9 @@ namespace CrushLens
             b.AppendLine("<div class=\"top\"><div class=\"brand\"><span class=\"mark\">♥</span> CrushLens 心动镜</div><div>LOCAL REPORT · " + DateTime.Now.ToString("yyyy.MM.dd", CultureInfo.InvariantCulture) + "</div></div>");
 
             double circumference = 2 * Math.PI * 73;
-            double dash = circumference * r.Score / 100.0;
-            b.AppendLine("<div class=\"card hero\"><div class=\"score\"><div class=\"ring\"><svg width=\"168\" height=\"168\" viewBox=\"0 0 168 168\"><circle cx=\"84\" cy=\"84\" r=\"73\" fill=\"none\" stroke=\"#f1e7e2\" stroke-width=\"10\"/><circle cx=\"84\" cy=\"84\" r=\"73\" fill=\"none\" stroke=\"" + scoreColor + "\" stroke-width=\"10\" stroke-linecap=\"round\" stroke-dasharray=\"" + dash.ToString("0.##", CultureInfo.InvariantCulture) + " " + circumference.ToString("0.##", CultureInfo.InvariantCulture) + "\" transform=\"rotate(-90 84 84)\"/></svg><div class=\"num\"><strong>" + r.Score + "</strong><span>/ 100 好感信号</span></div></div></div>");
-            b.AppendLine("<div><div><span class=\"pill\">" + TextKit.Html(r.Trend) + "</span><span class=\"pill\">" + TextKit.Html(s.Stage) + "</span></div><div class=\"label\">" + TextKit.Html(r.Label) + "</div><div class=\"muted\">" + TextKit.Html(s.MeName) + "  ×  " + TextKit.Html(s.CrushName) + " · " + TextKit.Html(s.Model) + "</div><div class=\"headline\">" + TextKit.Html(r.Headline) + "</div><p class=\"summary\">" + TextKit.Html(r.Summary) + "</p></div></div>");
+            double dash = circumference * finalScore / 100.0;
+            b.AppendLine("<div class=\"card hero\"><div class=\"score\"><div class=\"ring\"><svg width=\"168\" height=\"168\" viewBox=\"0 0 168 168\"><circle cx=\"84\" cy=\"84\" r=\"73\" fill=\"none\" stroke=\"#f1e7e2\" stroke-width=\"10\"/><circle cx=\"84\" cy=\"84\" r=\"73\" fill=\"none\" stroke=\"" + scoreColor + "\" stroke-width=\"10\" stroke-linecap=\"round\" stroke-dasharray=\"" + dash.ToString("0.##", CultureInfo.InvariantCulture) + " " + circumference.ToString("0.##", CultureInfo.InvariantCulture) + "\" transform=\"rotate(-90 84 84)\"/></svg><div class=\"num\"><strong>" + finalScore + "</strong><span>/ 100 好感信号</span></div></div></div>");
+            b.AppendLine("<div><div><span class=\"pill\">" + TextKit.Html(r.Trend) + "</span><span class=\"pill\">" + TextKit.Html(s.Stage) + "</span></div><div class=\"label\">" + TextKit.Html(r.Label) + "</div><div class=\"muted\">" + TextKit.Html(s.MeName) + "  ×  " + TextKit.Html(s.CrushName) + " · " + TextKit.Html(s.Model) + " · " + TextKit.Html(Scoring.Explain(r)) + "</div><div class=\"headline\">" + TextKit.Html(r.Headline) + "</div><p class=\"summary\">" + TextKit.Html(r.Summary) + "</p></div></div>");
 
             b.AppendLine("<div class=\"card\"><h2>六个行为维度</h2><div class=\"dims\">");
             string[] keys = new string[] { "initiative", "engagement", "care", "openness", "intimacy", "action" };
@@ -46,7 +47,7 @@ namespace CrushLens
             for (int i = 0; i < keys.Length; i++)
             {
                 int val = 0;
-                if (!r.Dimensions.TryGetValue(keys[i], out val)) val = r.Score;
+                if (!r.Dimensions.TryGetValue(keys[i], out val)) val = finalScore;
                 b.AppendLine("<div class=\"dim\"><span>" + labels[i] + "</span><div class=\"bar\"><i style=\"width:" + val + "%\"></i></div><b>" + val + "</b></div>");
             }
             b.AppendLine("</div></div>");
@@ -61,6 +62,19 @@ namespace CrushLens
                 b.AppendLine("</div>");
             }
             b.AppendLine("</div>");
+
+            if (r.MediaNotes.Count > 0)
+            {
+                b.AppendLine("<div class=\"card\"><h2>图片 / 表情包解读</h2>");
+                for (int i = 0; i < r.MediaNotes.Count; i++)
+                {
+                    MediaNote n = r.MediaNotes[i];
+                    b.AppendLine("<div class=\"signal\"><h3>图片 " + n.I + "</h3><p>" + TextKit.Html(n.Description) + "</p>");
+                    if (!string.IsNullOrEmpty(n.Signal)) b.AppendLine("<div class=\"quote\">" + TextKit.Html(n.Signal) + "</div>");
+                    b.AppendLine("</div>");
+                }
+                b.AppendLine("<div class=\"muted\" style=\"margin-top:12px\">图片文件只保存在本地，不嵌入本报告。</div></div>");
+            }
 
             b.AppendLine("<div class=\"card\"><h2>需要留心 / WATCH OUT</h2><div class=\"warn\"><ul>");
             if (r.Cautions.Count == 0) b.AppendLine("<li>暂未发现明显风险信号，但仍请尊重真实边界。</li>");
@@ -85,6 +99,7 @@ namespace CrushLens
             AddStat(b, st.CrushMedianReplySec > 0 ? Fmt.Duration(st.CrushMedianReplySec) : "—", "TA 的中位回复");
             AddStat(b, st.LateNight.ToString(), "深夜消息");
             AddStat(b, st.CurrentStreak + " 天", "末段连续");
+            if (s.Media != null && s.Media.Count > 0) AddStat(b, s.Media.Count.ToString(), "图片附件");
             b.AppendLine("</div><div class=\"disclaimer\">" + TextKit.Html(r.Disclaimer) + "</div></div>");
 
             b.AppendLine("<div class=\"footer\">CrushLens 心动镜 · 本地生成 · 不构成心理诊断或关系承诺<br/>AI 分析仅基于本次聊天节选；真实感受与边界，永远以面对面沟通为准。</div>");

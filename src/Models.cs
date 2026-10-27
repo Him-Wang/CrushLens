@@ -16,6 +16,26 @@ namespace CrushLens
         public bool IsMine;
     }
 
+    public class ChatMedia
+    {
+        public string FileName = "";
+        public string OriginalName = "";
+        public string MimeType = "image/jpeg";
+        public int Width;
+        public int Height;
+        public long Size;
+
+        [ScriptIgnore]
+        public byte[] Data;
+    }
+
+    public class MediaNote
+    {
+        public int I;
+        public string Description = "";
+        public string Signal = "";
+    }
+
     public class MessageTag
     {
         public int I;
@@ -40,6 +60,7 @@ namespace CrushLens
     public class AiReport
     {
         public int Score;
+        public int ModelScore;
         public string Label = "";
         public string Trend = "";
         public string Headline = "";
@@ -51,6 +72,7 @@ namespace CrushLens
         public string ReplyGrade = "";
         public string ReplyGradeReason = "";
         public string NextMessage = "";
+        public List<MediaNote> MediaNotes = new List<MediaNote>();
         public List<MessageTag> MessageTags = new List<MessageTag>();
         public string Disclaimer = "";
         public long AnalyzedAt;
@@ -145,6 +167,7 @@ namespace CrushLens
         public long CreatedAt;
         public long UpdatedAt;
         public List<ChatMessage> Messages = new List<ChatMessage>();
+        public List<ChatMedia> Media = new List<ChatMedia>();
         public AiReport Report;
 
         [ScriptIgnore]
@@ -242,8 +265,10 @@ namespace CrushLens
         public LocalStats Stats;
         public AppSettings Settings;
         public List<ChatMessage> Sample = new List<ChatMessage>();
+        public List<ChatMedia> Media = new List<ChatMedia>();
         public int Limit;
         public bool SampleTruncated;
         public int TotalSelected;
+        public bool ImageOnly;
     }
 }

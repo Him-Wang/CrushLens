@@ -105,7 +105,7 @@ namespace CrushLens
             TextRenderer.DrawText(g, "这是一个把聊天记录变成行为观察与沟通建议的小工具。它不是读心术，也不替你决定关系。", Theme.Small,
                 new Rectangle(24, 90, w - 60, 24), Palette.Muted,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            DrawStepChip(g, 24, 128, "01", "粘贴聊天");
+            DrawStepChip(g, 24, 128, "01", "聊天/截图");
             DrawStepChip(g, 190, 128, "02", "配置 API");
             DrawStepChip(g, 356, 128, "03", "读懂信号");
 
@@ -115,7 +115,7 @@ namespace CrushLens
             TextRenderer.DrawText(g, "API 怎么接", Theme.H3,
                 new Rectangle(22, y + 18, 140, 24), Palette.Ink,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            TextRenderer.DrawText(g, "只支持 OpenAI 兼容的 Chat Completions 接口。填 Base URL、模型 ID 与自己的 Key；\n本机模型（如 Ollama、LM Studio）可以留空 Key。", Theme.Small,
+            TextRenderer.DrawText(g, "只支持 OpenAI 兼容的 Chat Completions 接口。填 Base URL、模型 ID 与自己的 Key；\n本机模型（如 Ollama、LM Studio）可以留空 Key；图片分析需要视觉模型。", Theme.Small,
                 new Rectangle(22, y + 48, w - 44, 40), Palette.InkSoft, Ui.Wrap);
             DrawProvider(g, 22, y + 98, "DeepSeek", "api.deepseek.com/v1");
             DrawProvider(g, 22, y + 128, "通义千问", "dashscope.aliyuncs.com/compatible-mode/v1");
@@ -139,9 +139,9 @@ namespace CrushLens
             TextRenderer.DrawText(g, "数据会去哪里？", Theme.H3,
                 new Rectangle(22, y + 18, 200, 24), Palette.Ink,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            DrawBullet(g, 22, y + 54, w - 44, "聊天原文只写入程序目录旁的 <CrushLens_Data>/sessions；删除档案即删除文件。", Palette.Green);
-            DrawBullet(g, 22, y + 82, w - 44, "分析时只把本次选取的节选发送到你填写的 API；不经过 CrushLens 服务器，也没有遥测。", Palette.Green);
-            DrawBullet(g, 22, y + 110, w - 44, "API Key 使用 Windows DPAPI 加密保存，绑定当前 Windows 用户；不写入注册表或 AppData。", Palette.Green);
+            DrawBullet(g, 22, y + 54, w - 44, "聊天原文和图片只写入程序旁的 CrushLens_Data；删除档案即删除文件。", Palette.Green);
+            DrawBullet(g, 22, y + 82, w - 44, "分析时只把本次文字节选和已选图片发送到你填写的 API；没有遥测。", Palette.Green);
+            DrawBullet(g, 22, y + 110, w - 44, "API Key 使用 Windows DPAPI 加密保存，绑定当前 Windows 用户；不写入业务数据到注册表或 AppData。", Palette.Green);
             DrawBullet(g, 22, y + 138, w - 44, "把整个程序文件夹放到 U 盘即可带走；更换电脑后需要重新填写 Key。", Palette.Green);
             _folderLink = new Rectangle(22, y + 164, 120, 18);
             TextRenderer.DrawText(g, "打开数据目录  →", Theme.Tiny, _folderLink, Palette.RoseDark,
@@ -165,14 +165,14 @@ namespace CrushLens
             TextRenderer.DrawText(g, "不要用它读心、给关系下判决，更不要拿来设计操控或试探底线。", Theme.Small,
                 new Rectangle(80, y + 82, w - 110, 20), Palette.InkSoft,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
-            TextRenderer.DrawText(g, "分数是聊天中的互动信号强度，不是对方喜欢你的概率。明确拒绝就是拒绝；尊重边界比提高分数重要。", Theme.Tiny,
+            TextRenderer.DrawText(g, "分数不是对方喜欢你的概率。图片可能模糊或被误读，看不清就写不确定；明确拒绝就是拒绝，尊重边界比提高分数重要。", Theme.Tiny,
                 new Rectangle(24, y + 116, w - 48, 40), Palette.Muted, Ui.Wrap);
 
             y += 192;
             TextRenderer.DrawText(g, "功能灵感来自开源项目 Crush Monitor 与 ChatLab；本工具的界面与实现为独立编写。", Theme.Tiny,
                 new Rectangle(0, y, w, 20), Palette.MutedLight,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            TextRenderer.DrawText(g, "CrushLens v1.0 · portable · 不安装、不写注册表、不上传云端", Theme.Tiny,
+            TextRenderer.DrawText(g, "CrushLens v1.1 · portable · 不安装、不写注册表、不上传云端", Theme.Tiny,
                 new Rectangle(0, y + 20, w, 20), Palette.MutedLight,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         }

@@ -27,6 +27,7 @@ namespace CrushLens
         private readonly CardPanel _chatCard;
         private readonly ReportCanvas _reportCanvas;
         private readonly PlaceholderTextBox _inputBox;
+        private readonly MediaPicker _mediaPicker;
         private readonly Label _parseStatus;
         private readonly LinkLabel _sampleLink;
         private readonly ComboBox _meCombo;
@@ -134,7 +135,7 @@ namespace CrushLens
             inputTitle.Location = new Point(20, 18);
             inputTitle.AutoSize = true;
             _inputCard.Controls.Add(inputTitle);
-            Label inputSub = MakeLabel("支持微信 / QQ / WhatsApp / 通用文本 · 自动识别发言人", Theme.Tiny, Palette.Muted);
+            Label inputSub = MakeLabel("支持微信 / QQ / WhatsApp / 通用文本 · 可附加截图与表情包", Theme.Tiny, Palette.Muted);
             inputSub.Location = new Point(20, 42);
             inputSub.AutoSize = true;
             _inputCard.Controls.Add(inputSub);
@@ -157,7 +158,7 @@ namespace CrushLens
             _inputCard.Controls.Add(_sampleLink);
 
             _inputBox = new PlaceholderTextBox();
-            _inputBox.PlaceholderText = "把聊天记录粘贴到这里…\n\n支持微信、QQ、WhatsApp 与「昵称: 内容」通用文本，\n也可以直接拖入 .txt / .json 文件。";
+            _inputBox.PlaceholderText = "把聊天记录粘贴到这里…\n\n支持微信、QQ、WhatsApp 与「昵称: 内容」通用文本，\n也可以直接拖入 .txt / .json，并在下方添加截图或表情包。";
             _inputBox.TextChanged += InputTextChanged;
             _inputBox.AllowDrop = true;
             _inputBox.InnerTextBox.AllowDrop = true;
@@ -165,6 +166,12 @@ namespace CrushLens
             _inputBox.InnerTextBox.DragEnter += DragEnterFile;
             _inputBox.InnerTextBox.DragDrop += DragDropFile;
             _inputCard.Controls.Add(_inputBox);
+
+            _mediaPicker = new MediaPicker();
+            _mediaPicker.Notify = delegate(string msg) { if (Toast != null) Toast(msg); };
+            _mediaPicker.Changed += MediaChanged;
+            _mediaPicker.AllowDrop = true;
+            _inputCard.Controls.Add(_mediaPicker);
 
             _parseStatus = MakeLabel("尚未导入聊天。", Theme.Tiny, Palette.Muted);
             _parseStatus.AutoSize = false;
@@ -311,10 +318,11 @@ namespace CrushLens
             int h = _inputCard.ClientSize.Height;
             if (w < 100 || h < 300) return;
             _sampleLink.SetBounds(w - 94, 18, 74, 22);
-            _inputBox.SetBounds(20, 66, w - 40, Math.Max(110, h - 330));
-            _parseStatus.SetBounds(22, _inputBox.Bottom + 8, w - 44, 20);
+            _inputBox.SetBounds(20, 66, w - 40, Math.Max(96, h - 412));
+            _mediaPicker.SetBounds(20, _inputBox.Bottom + 8, w - 40, 82);
+            _parseStatus.SetBounds(22, _mediaPicker.Bottom + 4, w - 44, 20);
 
-            int labelY = _parseStatus.Bottom + 10;
+            int labelY = _parseStatus.Bottom + 8;
             int comboY = labelY + 20;
             int gap = 10;
             int avail = w - 40;
@@ -343,6 +351,41 @@ namespace CrushLens
             _parseStatus.ForeColor = Palette.Muted;
         }
 
+        private void MediaChanged(object sender, EventArgs e)
+        {
+            if (_analyzing) return;
+            EnsureImageParticipants();
+            if (!string.IsNullOrWhiteSpace(_inputBox.Text)) ParseNow();
+            else
+            {
+                if (_mediaPicker.Count > 0)
+                {
+                    _parseStatus.Text = "仅图片分析 · " + _mediaPicker.Count + " 张图片（需视觉模型）";
+                    _parseStatus.ForeColor = Palette.Amber;
+                }
+                else
+                {
+                    _parseStatus.Text = "尚未导入聊天。";
+                    _parseStatus.ForeColor = Palette.Muted;
+                }
+            }
+            UpdatePrivacyNote();
+            UpdateAnalyzeEnabled();
+        }
+
+        private void EnsureImageParticipants()
+        {
+            if (_mediaPicker == null || _mediaPicker.Count == 0) return;
+            if (_meCombo.Items.Count == 0)
+            {
+                _meCombo.Items.Add("我");
+                _crushCombo.Items.Add("对方");
+            }
+            if (_meCombo.SelectedIndex < 0 && _meCombo.Items.Count > 0) _meCombo.SelectedIndex = 0;
+            if (_crushCombo.SelectedIndex < 0 && _crushCombo.Items.Count > 0)
+                _crushCombo.SelectedIndex = Math.Min(1, _crushCombo.Items.Count - 1);
+        }
+
         private void InputKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Control && e.KeyCode == Keys.Enter)
@@ -358,10 +401,19 @@ namespace CrushLens
             if (string.IsNullOrWhiteSpace(text))
             {
                 _parsed = null;
-                _parseStatus.Text = "尚未导入聊天。";
-                _parseStatus.ForeColor = Palette.Muted;
-                _meCombo.Items.Clear();
-                _crushCombo.Items.Clear();
+                if (_mediaPicker != null && _mediaPicker.Count > 0)
+                {
+                    EnsureImageParticipants();
+                    _parseStatus.Text = "仅图片分析 · " + _mediaPicker.Count + " 张图片（需视觉模型）";
+                    _parseStatus.ForeColor = Palette.Amber;
+                }
+                else
+                {
+                    _parseStatus.Text = "尚未导入聊天。";
+                    _parseStatus.ForeColor = Palette.Muted;
+                    _meCombo.Items.Clear();
+                    _crushCombo.Items.Clear();
+                }
                 UpdateAnalyzeEnabled();
                 return;
             }
@@ -372,8 +424,17 @@ namespace CrushLens
                 UpdateNameCombos(parsed);
                 if (parsed.Messages.Count == 0)
                 {
-                    _parseStatus.Text = string.IsNullOrEmpty(parsed.Warning) ? "没有识别到消息。" : parsed.Warning;
-                    _parseStatus.ForeColor = Palette.RoseDark;
+                    if (_mediaPicker != null && _mediaPicker.Count > 0)
+                    {
+                        EnsureImageParticipants();
+                        _parseStatus.Text = "未识别到文字，将只分析 " + _mediaPicker.Count + " 张图片（需视觉模型）";
+                        _parseStatus.ForeColor = Palette.Amber;
+                    }
+                    else
+                    {
+                        _parseStatus.Text = string.IsNullOrEmpty(parsed.Warning) ? "没有识别到消息。" : parsed.Warning;
+                        _parseStatus.ForeColor = Palette.RoseDark;
+                    }
                 }
                 else
                 {
@@ -399,6 +460,8 @@ namespace CrushLens
                     }
                     if (parsed.Names.Count > 2)
                         status += "  ·  当前只分析你选择的两个人";
+                    if (_mediaPicker != null && _mediaPicker.Count > 0)
+                        status += "  ·  附 " + _mediaPicker.Count + " 张图片";
                     _parseStatus.Text = status;
                 }
             }
@@ -465,7 +528,9 @@ namespace CrushLens
 
         private void UpdateAnalyzeEnabled()
         {
-            bool ok = !_analyzing && _parsed != null && _parsed.Messages.Count >= 4 &&
+            bool hasText = _parsed != null && _parsed.Messages.Count >= 4;
+            bool hasMedia = _mediaPicker != null && _mediaPicker.Count > 0;
+            bool ok = !_analyzing && (hasText || hasMedia) &&
                       _meCombo.SelectedItem != null && _crushCombo.SelectedItem != null &&
                       !string.Equals((string)_meCombo.SelectedItem, (string)_crushCombo.SelectedItem, StringComparison.OrdinalIgnoreCase);
             _analyzeButton.Enabled = ok;
@@ -484,7 +549,9 @@ namespace CrushLens
             {
                 string model = string.IsNullOrEmpty(Settings.Model) ? "未设置模型" : Settings.Model;
                 _privacyNote.Title = "隐私与发送范围";
-                _privacyNote.Body = "已配置 " + Settings.Provider + " · " + model + "。点击分析后，只会把本次聊天节选发送到你填写的 API；不经过 CrushLens 服务器。";
+                _privacyNote.Body = "已配置 " + Settings.Provider + " · " + model + "。点击分析后，只会把本次聊天节选" +
+                    (_mediaPicker != null && _mediaPicker.Count > 0 ? "和 " + _mediaPicker.Count + " 张图片" : "") +
+                    "发送到你填写的 API；不经过 CrushLens 服务器。";
             }
             else if (Settings != null && TextKit.IsLocalEndpoint(Settings.BaseUrl))
             {
@@ -507,13 +574,26 @@ namespace CrushLens
             }
             _parseTimer.Stop();
             ParseNow();
-            if (_parsed == null || _parsed.Messages.Count < 4)
+            int mediaCount = _mediaPicker != null ? _mediaPicker.Count : 0;
+            if (mediaCount > 0) EnsureImageParticipants();
+            if ((_parsed == null || _parsed.Messages.Count == 0) && mediaCount == 0)
             {
-                UiDialog.Warn(this, "聊天还不够", "至少需要 4 条双方消息。请检查昵称与时间格式，或先载入示例。");
+                UiDialog.Warn(this, "聊天还不够", "至少需要 4 条双方消息，或附加 1 张聊天截图 / 表情包。请检查格式，或先载入示例。");
                 return;
             }
+            if (_parsed != null && _parsed.Messages.Count > 0 && _parsed.Messages.Count < 4 && mediaCount == 0)
+            {
+                UiDialog.Warn(this, "聊天还不够", "至少需要 4 条双方消息。也可以附加聊天截图后用视觉模型一起分析。");
+                return;
+            }
+
             string me = _meCombo.SelectedItem as string;
             string crush = _crushCombo.SelectedItem as string;
+            if (mediaCount > 0)
+            {
+                if (string.IsNullOrEmpty(me)) me = "我";
+                if (string.IsNullOrEmpty(crush)) crush = "对方";
+            }
             if (string.IsNullOrEmpty(me) || string.IsNullOrEmpty(crush) || string.Equals(me, crush, StringComparison.OrdinalIgnoreCase))
             {
                 UiDialog.Warn(this, "请选择两个人", "「我是」和「对方是」需要选择不同的发言人。");
@@ -528,13 +608,14 @@ namespace CrushLens
                     return;
             }
 
+            List<ChatMessage> messages = _parsed != null ? _parsed.Messages : new List<ChatMessage>();
             int selectedCount = 0;
-            for (int i = 0; i < _parsed.Messages.Count; i++)
+            for (int i = 0; i < messages.Count; i++)
             {
-                ChatMessage m = _parsed.Messages[i];
+                ChatMessage m = messages[i];
                 if (StatsEngine.SameName(m.Sender, me) || StatsEngine.SameName(m.Sender, crush)) selectedCount++;
             }
-            if (selectedCount < 4)
+            if (selectedCount < 4 && mediaCount == 0)
             {
                 UiDialog.Warn(this, "消息太少", "你选择的两个人之间只有 " + selectedCount + " 条消息，样本不足。");
                 return;
@@ -552,13 +633,20 @@ namespace CrushLens
             session.AnalysisLimit = GetLimit();
             session.CreatedAt = TimeUtil.NowMs();
             session.UpdatedAt = session.CreatedAt;
-            session.Messages = _parsed.Messages;
+            session.Messages = messages;
+            session.Media = _mediaPicker != null ? _mediaPicker.ToChatMedia() : new List<ChatMedia>();
             session.Stats = StatsEngine.Compute(session.Messages, me, crush);
             _session = session;
 
             AnalysisInput input = LlmClient.BuildInput(session, session.AnalysisLimit);
             input.Settings = Settings;
-            if (input.Sample.Count < 4)
+            input.ImageOnly = messages.Count == 0 && input.Media.Count > 0;
+            if (input.ImageOnly == false && input.Sample.Count == 0)
+            {
+                UiDialog.Warn(this, "没有可分析的内容", "图片附件读取失败，或文字聊天不足。请重新添加图片。");
+                return;
+            }
+            if (input.Sample.Count < 4 && mediaCount == 0)
             {
                 UiDialog.Warn(this, "样本不足", "可发送给模型的聊天节选太少，请再补充一些记录。");
                 return;
@@ -576,7 +664,8 @@ namespace CrushLens
             ShowChat(session);
             _reportCanvas.SetLoading(_phases[0]);
             _phaseTimer.Start();
-            if (Toast != null) Toast("正在分析…节选 " + input.Sample.Count + " 条，不会上传到 CrushLens。");
+            if (Toast != null) Toast("正在分析…" + input.Sample.Count + " 条文字" +
+                (mediaCount > 0 ? " + " + mediaCount + " 张图片" : "") + "，不会上传到 CrushLens。");
 
             try
             {
@@ -604,9 +693,10 @@ namespace CrushLens
             catch (OperationCanceledException)
             {
                 if (IsDisposed) return;
+                ChatSession canceled = _session;
                 _session = null;
                 _reportCanvas.SetEmpty();
-                ShowInput("");
+                ShowInput(canceled != null ? canceled.RawText : "", canceled != null ? canceled.Media : null);
                 if (Toast != null) Toast("已取消分析。");
             }
             catch (LlmException ex)
@@ -656,11 +746,21 @@ namespace CrushLens
             _inputCard.Visible = false;
             _chatCard.Visible = true;
             _chatCanvas.SetSession(session);
-            _chatTitle.Text = "聊天逐句";
             int selected = _chatCanvas.ShownMessages;
-            string meta = "共 " + selected + " 条双方消息";
-            if (_chatCanvas.TaggedMessages > 0) meta += " · AI 标注最近 " + _chatCanvas.TaggedMessages + " 条";
-            if (_chatCanvas.TotalSelected > selected) meta += " · 仅显示最近 " + selected + " 条";
+            int mediaCount = session.Media != null ? session.Media.Count : 0;
+            _chatTitle.Text = selected == 0 && mediaCount > 0 ? "图片 / 表情包" : "聊天逐句";
+            string meta;
+            if (selected == 0 && mediaCount > 0)
+            {
+                meta = "仅图片分析 · " + mediaCount + " 张图片";
+            }
+            else
+            {
+                meta = "共 " + selected + " 条双方消息";
+                if (mediaCount > 0) meta += " · 含 " + mediaCount + " 张图片";
+                if (_chatCanvas.TaggedMessages > 0) meta += " · AI 标注最近 " + _chatCanvas.TaggedMessages + " 条";
+                if (_chatCanvas.TotalSelected > selected) meta += " · 仅显示最近 " + selected + " 条";
+            }
             _chatMeta.Text = meta;
             _chatMeta.Location = new Point(20, 42);
             _chatCanvas.SetBounds(0, 64, _chatCard.Width, Math.Max(50, _chatCard.Height - 64));
@@ -668,6 +768,11 @@ namespace CrushLens
         }
 
         private void ShowInput(string raw)
+        {
+            ShowInput(raw, null);
+        }
+
+        private void ShowInput(string raw, List<ChatMedia> media)
         {
             _inputCard.Visible = true;
             _chatCard.Visible = false;
@@ -677,13 +782,12 @@ namespace CrushLens
             _editButton.Visible = false;
             _session = null;
             _inputBox.Text = raw ?? "";
+            if (media != null && media.Count > 0) _mediaPicker.SetFromSession(media);
+            else _mediaPicker.Clear();
+            ParseNow();
             if (string.IsNullOrEmpty(raw))
             {
                 _inputBox.FocusInput();
-            }
-            else
-            {
-                ParseNow();
             }
             UpdateAnalyzeEnabled();
         }
@@ -695,15 +799,20 @@ namespace CrushLens
                 if (_cts != null) _cts.Cancel();
                 return;
             }
-            ShowInput("");
+            ShowInput("", null);
         }
 
         public void EditCurrent()
         {
             if (_analyzing) return;
             string raw = "";
-            if (_session != null) raw = !string.IsNullOrEmpty(_session.RawText) ? _session.RawText : SessionToRaw(_session);
-            ShowInput(raw);
+            List<ChatMedia> media = null;
+            if (_session != null)
+            {
+                raw = !string.IsNullOrEmpty(_session.RawText) ? _session.RawText : SessionToRaw(_session);
+                media = _session.Media;
+            }
+            ShowInput(raw, media);
         }
 
         private string SessionToRaw(ChatSession s)
@@ -722,6 +831,9 @@ namespace CrushLens
         {
             if (session == null) return;
             _session = session;
+            if (session.Messages == null) session.Messages = new List<ChatMessage>();
+            if (session.Media == null) session.Media = new List<ChatMedia>();
+            Storage.LoadMedia(session);
             session.Stats = StatsEngine.Compute(session.Messages, session.MeName, session.CrushName);
             _stageCombo.SelectedItem = session.Stage;
             _meCombo.Items.Clear();
@@ -741,7 +853,7 @@ namespace CrushLens
             else
             {
                 string raw = !string.IsNullOrEmpty(session.RawText) ? session.RawText : SessionToRaw(session);
-                ShowInput(raw);
+                ShowInput(raw, session.Media);
             }
         }
 
@@ -814,8 +926,15 @@ namespace CrushLens
                 string[] files = e.Data.GetData(DataFormats.FileDrop) as string[];
                 if (files != null && files.Length > 0)
                 {
-                    string ext = Path.GetExtension(files[0]).ToLowerInvariant();
-                    if (ext == ".txt" || ext == ".json") e.Effect = DragDropEffects.Copy;
+                    for (int i = 0; i < files.Length; i++)
+                    {
+                        string ext = Path.GetExtension(files[i]).ToLowerInvariant();
+                        if (ext == ".txt" || ext == ".json" || MediaUtil.IsImageFile(files[i]))
+                        {
+                            e.Effect = DragDropEffects.Copy;
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -825,7 +944,19 @@ namespace CrushLens
             if (e.Data == null || !e.Data.GetDataPresent(DataFormats.FileDrop)) return;
             string[] files = e.Data.GetData(DataFormats.FileDrop) as string[];
             if (files == null || files.Length == 0) return;
-            LoadFile(files[0]);
+            List<string> images = new List<string>();
+            string textFile = "";
+            for (int i = 0; i < files.Length; i++)
+            {
+                if (MediaUtil.IsImageFile(files[i])) images.Add(files[i]);
+                else
+                {
+                    string ext = Path.GetExtension(files[i]).ToLowerInvariant();
+                    if ((ext == ".txt" || ext == ".json") && string.IsNullOrEmpty(textFile)) textFile = files[i];
+                }
+            }
+            if (images.Count > 0) _mediaPicker.AddPaths(this, images.ToArray());
+            if (!string.IsNullOrEmpty(textFile)) LoadFile(textFile);
         }
     }
 }

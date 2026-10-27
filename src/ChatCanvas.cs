@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;
 using System.Windows.Forms;
 
 namespace CrushLens
@@ -14,6 +15,8 @@ namespace CrushLens
         private int _shown;
         private int _tagged;
         private int _totalSelected;
+        private readonly List<Image> _mediaImages = new List<Image>();
+        private readonly List<string> _mediaNames = new List<string>();
 
         private class Bubble
         {
@@ -54,6 +57,7 @@ namespace CrushLens
             _session = session;
             _layoutWidth = -1;
             ScrollY = 0;
+            LoadMediaImages(session);
             BuildLayout();
             Invalidate();
         }
@@ -65,8 +69,44 @@ namespace CrushLens
             _shown = 0;
             _tagged = 0;
             _totalSelected = 0;
+            ClearMediaImages();
             SetContentHeight(0);
             Invalidate();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) ClearMediaImages();
+            base.Dispose(disposing);
+        }
+
+        private void ClearMediaImages()
+        {
+            for (int i = 0; i < _mediaImages.Count; i++) _mediaImages[i].Dispose();
+            _mediaImages.Clear();
+            _mediaNames.Clear();
+        }
+
+        private void LoadMediaImages(ChatSession session)
+        {
+            ClearMediaImages();
+            if (session == null || session.Media == null) return;
+            for (int i = 0; i < session.Media.Count; i++)
+            {
+                ChatMedia m = session.Media[i];
+                if (m == null || m.Data == null || m.Data.Length == 0) continue;
+                try
+                {
+                    using (MemoryStream ms = new MemoryStream(m.Data))
+                    using (Image source = Image.FromStream(ms))
+                        _mediaImages.Add(new Bitmap(source));
+                    _mediaNames.Add(string.IsNullOrEmpty(m.OriginalName) ? "图片 " + (i + 1) : m.OriginalName);
+                }
+                catch
+                {
+                    Log.Write("WARN 图片画廊解码失败（已跳过一张图片）。");
+                }
+            }
         }
 
         protected override void Recalc()
@@ -95,6 +135,11 @@ namespace CrushLens
                     msgs.Add(m);
             }
             _totalSelected = msgs.Count;
+            if (msgs.Count == 0 && _mediaImages.Count > 0)
+            {
+                SetContentHeight(GalleryHeight(width));
+                return;
+            }
             int start = Math.Max(0, msgs.Count - 120);
             using (Graphics g = CreateGraphics())
             {
@@ -152,7 +197,18 @@ namespace CrushLens
 
         protected override void PaintContent(Graphics g)
         {
-            if (_session == null || _items.Count == 0)
+            if (_session == null)
+            {
+                TextRenderer.DrawText(g, "还没有可展示的聊天记录。", Theme.Small,
+                    new Rectangle(0, 80, ContentWidth, 40), Palette.Muted, Ui.Center);
+                return;
+            }
+            if (_items.Count == 0 && _mediaImages.Count > 0)
+            {
+                PaintGallery(g);
+                return;
+            }
+            if (_items.Count == 0)
             {
                 TextRenderer.DrawText(g, "还没有可展示的聊天记录。", Theme.Small,
                     new Rectangle(0, 80, ContentWidth, 40), Palette.Muted, Ui.Center);
@@ -168,6 +224,66 @@ namespace CrushLens
                 if (b.NewDay) DrawDay(g, b);
                 DrawBubble(g, b);
             }
+        }
+
+        private int GalleryCols(int width)
+        {
+            return width >= 500 ? 3 : 2;
+        }
+
+        private int GalleryHeight(int width)
+        {
+            int cols = GalleryCols(width);
+            int rows = (int)Math.Ceiling((double)_mediaImages.Count / cols);
+            int tileW = Math.Max(90, (width - 24 - (cols - 1) * 10) / cols);
+            return 14 + 34 + rows * (tileW + 42) + 30;
+        }
+
+        private void PaintGallery(Graphics g)
+        {
+            int width = ContentWidth;
+            int cols = GalleryCols(width);
+            int gap = 10;
+            int tileW = Math.Max(90, (width - 24 - (cols - 1) * gap) / cols);
+            int imageH = tileW;
+            TextRenderer.DrawText(g, "附件预览 · " + _mediaImages.Count + " 张", Theme.H3,
+                new Rectangle(12, 12, width - 24, 26), Palette.Ink,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            TextRenderer.DrawText(g, "仅图片分析；视觉模型会读取图片中的文字与画面。", Theme.Tiny,
+                new Rectangle(12, 38, width - 24, 18), Palette.Muted,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
+            int y = 68;
+            for (int i = 0; i < _mediaImages.Count; i++)
+            {
+                int col = i % cols;
+                int row = i / cols;
+                int x = 12 + col * (tileW + gap);
+                int ty = y + row * (tileW + 42);
+                Rectangle r = new Rectangle(x, ty, tileW, imageH);
+                Ui.FillRound(g, r, 10f, Palette.CardSoft);
+                Image img = _mediaImages[i];
+                float scale = Math.Min((float)(tileW - 8) / img.Width, (float)(imageH - 8) / img.Height);
+                int dw = Math.Max(1, (int)(img.Width * scale));
+                int dh = Math.Max(1, (int)(img.Height * scale));
+                int dx = x + (tileW - dw) / 2;
+                int dy = ty + (imageH - dh) / 2;
+                using (GraphicsPath path = Ui.Rounded(new RectangleF(x + 1, ty + 1, tileW - 2, imageH - 2), 9f))
+                {
+                    GraphicsState state = g.Save();
+                    g.SetClip(path);
+                    g.DrawImage(img, new Rectangle(dx, dy, dw, dh));
+                    g.Restore(state);
+                }
+                Ui.StrokeRound(g, new RectangleF(x + 0.5f, ty + 0.5f, tileW - 1, imageH - 1), 10f, Palette.Line, 1f);
+                TextRenderer.DrawText(g, Fmt.Truncate(_mediaNames[i], 22), Theme.Tiny,
+                    new Rectangle(x, ty + imageH + 3, tileW, 18), Palette.Muted,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
+                Ui.Pill(g, new Rectangle(x + 6, ty + 6, 22, 18), (i + 1).ToString(), Theme.Tiny,
+                    Color.FromArgb(195, 40, 32, 38), Palette.White);
+            }
+            TextRenderer.DrawText(g, "压缩图只留在本机；分析时随节选发送到你配置的视觉 API。", Theme.Tiny,
+                new Rectangle(12, GalleryHeight(width) - 28, width - 24, 20), Palette.Muted,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.WordBreak);
         }
 
         private string DisplayContent(ChatMessage m)

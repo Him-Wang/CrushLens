@@ -35,6 +35,11 @@ namespace CrushLens
             get { return Path.Combine(DataDir, "exports"); }
         }
 
+        public static string MediaDir
+        {
+            get { return Path.Combine(DataDir, "media"); }
+        }
+
         public static string SettingsFile
         {
             get { return Path.Combine(DataDir, "settings.json"); }
@@ -50,6 +55,7 @@ namespace CrushLens
             if (!Directory.Exists(DataDir)) Directory.CreateDirectory(DataDir);
             if (!Directory.Exists(SessionsDir)) Directory.CreateDirectory(SessionsDir);
             if (!Directory.Exists(ExportsDir)) Directory.CreateDirectory(ExportsDir);
+            if (!Directory.Exists(MediaDir)) Directory.CreateDirectory(MediaDir);
         }
 
         public static void EnsureWritable()
@@ -146,9 +152,47 @@ namespace CrushLens
             if (session == null || string.IsNullOrEmpty(session.Id)) throw new ArgumentException("会话为空");
             if (session.IsDemo) return;
             AppPaths.EnsureData();
+            SaveMedia(session);
             session.UpdatedAt = TimeUtil.NowMs();
             string path = Path.Combine(AppPaths.SessionsDir, session.Id + ".json");
             AtomicWrite(path, Json.Serialize(session));
+        }
+
+        public static void SaveMedia(ChatSession session)
+        {
+            if (session == null || session.Media == null || session.Media.Count == 0) return;
+            string dir = Path.Combine(AppPaths.MediaDir, session.Id);
+            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            for (int i = 0; i < session.Media.Count; i++)
+            {
+                ChatMedia m = session.Media[i];
+                if (string.IsNullOrEmpty(m.FileName)) m.FileName = "image" + (i + 1) + ".jpg";
+                if (m.Data == null || m.Data.Length == 0) continue;
+                string path = Path.Combine(dir, m.FileName);
+                File.WriteAllBytes(path, m.Data);
+                m.Size = m.Data.Length;
+            }
+        }
+
+        public static void LoadMedia(ChatSession session)
+        {
+            if (session == null || session.Media == null) return;
+            string dir = Path.Combine(AppPaths.MediaDir, session.Id);
+            for (int i = 0; i < session.Media.Count; i++)
+            {
+                ChatMedia m = session.Media[i];
+                if (m.Data != null && m.Data.Length > 0) continue;
+                if (string.IsNullOrEmpty(m.FileName)) continue;
+                try
+                {
+                    string path = Path.Combine(dir, m.FileName);
+                    if (File.Exists(path)) m.Data = File.ReadAllBytes(path);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("读取图片附件失败", ex);
+                }
+            }
         }
 
         public static List<ChatSession> LoadSessions()
@@ -164,7 +208,10 @@ namespace CrushLens
                     {
                         string json = File.ReadAllText(files[i], Encoding.UTF8);
                         ChatSession s = Json.Deserialize<ChatSession>(json);
-                        if (s == null || s.Messages == null || s.Messages.Count == 0) continue;
+                        if (s == null) continue;
+                        if (s.Messages == null) s.Messages = new List<ChatMessage>();
+                        if (s.Media == null) s.Media = new List<ChatMedia>();
+                        if (s.Messages.Count == 0 && s.Media.Count == 0) continue;
                         if (string.IsNullOrEmpty(s.Id)) s.Id = Path.GetFileNameWithoutExtension(files[i]);
                         s.Stats = StatsEngine.Compute(s.Messages, s.MeName, s.CrushName);
                         s.IsDemo = false;
@@ -189,6 +236,15 @@ namespace CrushLens
             if (string.IsNullOrEmpty(id)) return;
             string path = Path.Combine(AppPaths.SessionsDir, id + ".json");
             if (File.Exists(path)) File.Delete(path);
+            string mediaDir = Path.Combine(AppPaths.MediaDir, id);
+            try
+            {
+                if (Directory.Exists(mediaDir)) Directory.Delete(mediaDir, true);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("删除图片附件失败", ex);
+            }
         }
 
         public static void AtomicWrite(string path, string content)

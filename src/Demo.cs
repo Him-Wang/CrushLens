@@ -123,6 +123,7 @@ namespace CrushLens
         {
             AiReport r = new AiReport();
             r.Score = 82;
+            r.ModelScore = 82;
             r.Label = "双向升温";
             r.Trend = "升温中";
             r.Headline = "她不是礼貌，她在给你台阶";
