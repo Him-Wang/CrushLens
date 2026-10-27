@@ -1,0 +1,24 @@
+# Local application data / test chats / API keys
+CrushLens_Data/
+**/CrushLens_Data/
+
+# Build output
+build/
+**/build/
+dist/
+release/
+
+# Packaged artifacts (published through GitHub Releases)
+*.zip
+*.7z
+
+# IDE / OS noise
+.vs/
+.vscode/
+*.user
+*.suo
+*.cache
+Thumbs.db
+desktop.ini
+*.log
+.tmp/
