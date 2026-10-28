@@ -59,6 +59,7 @@ namespace CrushLens
 
     public class AiReport
     {
+        public string Mode = "crush";
         public int Score;
         public int ModelScore;
         public string Label = "";
@@ -159,6 +160,7 @@ namespace CrushLens
         public string Title = "";
         public string MeName = "";
         public string CrushName = "";
+        public string Mode = "crush";
         public string Stage = "暧昧中";
         public string RawText = "";
         public string Provider = "";

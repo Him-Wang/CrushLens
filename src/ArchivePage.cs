@@ -234,23 +234,25 @@ namespace CrushLens
             RectangleF card = new RectangleF(0, 0, Width, Height - 8);
             Ui.Card(g, card, 13f, _hover ? Color.FromArgb(255, 252, 251) : Palette.Card, _hover ? Color.FromArgb(232, 210, 210) : Palette.Line);
             int score = Session.Report != null ? Scoring.GetScore(Session.Report) : 0;
+            bool couple = Scoring.IsCouple(Session.Mode) || (Session.Report != null && Scoring.IsCouple(Session.Report.Mode));
             Rectangle badge = new Rectangle(18, 20, 58, 58);
             Ui.FillRound(g, badge, 12f, Ui.ScoreSoft(score));
             TextRenderer.DrawText(g, score.ToString(), new Font(Theme.FontFamily, 18f, FontStyle.Bold),
                 new Rectangle(badge.X, badge.Y + 4, badge.Width, 34), Ui.ScoreColor(score), Ui.Center);
-            TextRenderer.DrawText(g, "好感度", Theme.Tiny, new Rectangle(badge.X, badge.Bottom - 18, badge.Width, 12), Ui.ScoreColor(score), Ui.Center);
+            TextRenderer.DrawText(g, couple ? "关系分" : "好感度", Theme.Tiny, new Rectangle(badge.X, badge.Bottom - 18, badge.Width, 12), Ui.ScoreColor(score), Ui.Center);
 
             TextRenderer.DrawText(g, Session.DisplayTitle(), Theme.MediumBold,
                 new Rectangle(92, 14, Width - 230, 24), Palette.Ink,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
-            Rectangle stage = new Rectangle(92, 42, 56, 19);
+            Rectangle stage = new Rectangle(92, 42, couple ? 92 : 56, 19);
             Ui.Pill(g, stage, Session.Stage, Theme.Tiny, Palette.BgDeep, Palette.Muted);
             string date = Session.UpdatedAt > 0 ? Fmt.Ago(Session.UpdatedAt) : Fmt.ShortDate(Session.CreatedAt);
             string countText = Session.Messages.Count > 0
                 ? Session.Messages.Count + " 条消息"
                 : (Session.Media != null && Session.Media.Count > 0 ? "仅图片 · " + Session.Media.Count + " 张" : "0 条消息");
-            TextRenderer.DrawText(g, date + "  ·  " + countText + "  ·  " + (Session.Report != null ? Session.Report.Label : ""),
-                Theme.Tiny, new Rectangle(156, 42, Width - 300, 20), Palette.Muted,
+            int metaX = stage.Right + 8;
+            TextRenderer.DrawText(g, (couple ? "情侣 · " : "") + date + "  ·  " + countText + "  ·  " + (Session.Report != null ? Session.Report.Label : ""),
+                Theme.Tiny, new Rectangle(metaX, 42, Width - metaX - 96, 20), Palette.Muted,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
             string preview = Session.Report != null ? Session.Report.Headline : "";
             TextRenderer.DrawText(g, preview, Theme.Small, new Rectangle(92, 66, Width - 240, 20), Palette.InkSoft,

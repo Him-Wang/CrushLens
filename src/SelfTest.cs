@@ -40,6 +40,35 @@ namespace CrushLens
                 dims["intimacy"] = 75;
                 dims["action"] = 40;
                 check(Scoring.FromDimensions(dims, 72) == 65, "score calibration", Scoring.FromDimensions(dims, 72).ToString());
+                System.Collections.Generic.Dictionary<string, int> coupleDims = new System.Collections.Generic.Dictionary<string, int>();
+                coupleDims["security"] = 90;
+                coupleDims["reciprocity"] = 80;
+                coupleDims["repair"] = 70;
+                coupleDims["boundaries"] = 85;
+                coupleDims["intimacy"] = 75;
+                coupleDims["future"] = 60;
+                check(Scoring.FromDimensions(coupleDims, 72, Scoring.CoupleMode) == 78, "couple calibration", Scoring.FromDimensions(coupleDims, 72, Scoring.CoupleMode).ToString());
+                ChatSession coupleSession = new ChatSession();
+                coupleSession.Mode = Scoring.CoupleMode;
+                coupleSession.MeName = "我";
+                coupleSession.CrushName = "TA";
+                string coupleJson = "{\"score\":72,\"label\":\"关系稳定\",\"trend\":\"稳定\",\"headline\":\"连接稳定\",\"summary\":\"这是一段关系样本，用于确认解析器能够读取情侣维度。\",\"dimensions\":{\"security\":90,\"reciprocity\":80,\"repair\":70,\"boundaries\":85,\"intimacy\":75,\"future\":60},\"signals\":[],\"cautions\":[],\"advice\":[],\"reply_grade\":\"B\",\"reply_grade_reason\":\"沟通清楚\",\"next_message\":\"我们晚点聊聊\",\"media_notes\":[],\"message_tags\":[],\"disclaimer\":\"不是心理诊断\"}";
+                AiReport coupleReport = LlmClient.ParseReport(coupleJson, coupleSession);
+                check(coupleReport.Mode == Scoring.CoupleMode && coupleReport.Dimensions.ContainsKey("security"), "couple parse", coupleReport.Mode);
+                check(Scoring.GetScore(coupleReport) == 78, "couple report score", Scoring.GetScore(coupleReport).ToString());
+                AnalysisInput coupleInput = LlmClient.BuildInput(coupleSession, 120);
+                string couplePrompt = LlmClient.BuildPrompt(coupleInput, false);
+                check(couplePrompt.Contains("security") && couplePrompt.Contains("情侣"), "couple prompt", couplePrompt.Length + " chars");
+                coupleSession.Report = coupleReport;
+                coupleSession.Messages = session.Messages;
+                coupleSession.MeName = session.MeName;
+                coupleSession.CrushName = "TA";
+                coupleSession.Stats = StatsEngine.Compute(coupleSession.Messages, coupleSession.MeName, coupleSession.CrushName);
+                string coupleHtml = ReportExporter.BuildHtml(coupleSession);
+                check(coupleHtml.Contains("关系六维") && coupleHtml.Contains("情侣关系"), "couple html export", coupleHtml.Length + " chars");
+                ChatSession coupleBack = Json.Deserialize<ChatSession>(Json.Serialize(coupleSession));
+                check(coupleBack != null && coupleBack.Mode == Scoring.CoupleMode && coupleBack.Report != null && coupleBack.Report.Mode == Scoring.CoupleMode,
+                    "couple roundtrip", "");
 
                 string json = Json.Serialize(session);
                 ChatSession back = Json.Deserialize<ChatSession>(json);

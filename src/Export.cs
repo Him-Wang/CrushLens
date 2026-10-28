@@ -12,13 +12,14 @@ namespace CrushLens
             if (s == null || s.Report == null) throw new InvalidOperationException("没有可导出的报告。");
             AiReport r = s.Report;
             LocalStats st = s.Stats ?? StatsEngine.Compute(s.Messages, s.MeName, s.CrushName);
+            bool couple = Scoring.IsCouple(s.Mode) || Scoring.IsCouple(r.Mode);
             int finalScore = Scoring.GetScore(r);
             string scoreColor = finalScore >= 75 ? "#d9546d" : (finalScore >= 55 ? "#b78038" : "#5c7f9f");
             StringBuilder b = new StringBuilder();
             b.AppendLine("<!DOCTYPE html>");
             b.AppendLine("<html lang=\"zh-CN\"><head><meta charset=\"utf-8\"/>");
             b.AppendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>");
-            b.AppendLine("<title>CrushLens · " + TextKit.Html(s.CrushName) + " 的好感度报告</title>");
+            b.AppendLine("<title>CrushLens · " + TextKit.Html(s.CrushName) + (couple ? " 的关系报告" : " 的好感度报告") + "</title>");
             b.AppendLine("<style>");
             b.AppendLine(":root{--rose:#e05b72;--rose-deep:#b94156;--peach:#f4b89b;--ink:#2b2328;--soft:#8b7e84;--line:#eadfd9;--paper:#f7f3ef;--card:#fffdfc;--green:#4c9476;--amber:#c2853e}");
             b.AppendLine("*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:'Microsoft YaHei UI','Microsoft YaHei','PingFang SC',sans-serif;line-height:1.75}");
@@ -38,21 +39,20 @@ namespace CrushLens
 
             double circumference = 2 * Math.PI * 73;
             double dash = circumference * finalScore / 100.0;
-            b.AppendLine("<div class=\"card hero\"><div class=\"score\"><div class=\"ring\"><svg width=\"168\" height=\"168\" viewBox=\"0 0 168 168\"><circle cx=\"84\" cy=\"84\" r=\"73\" fill=\"none\" stroke=\"#f1e7e2\" stroke-width=\"10\"/><circle cx=\"84\" cy=\"84\" r=\"73\" fill=\"none\" stroke=\"" + scoreColor + "\" stroke-width=\"10\" stroke-linecap=\"round\" stroke-dasharray=\"" + dash.ToString("0.##", CultureInfo.InvariantCulture) + " " + circumference.ToString("0.##", CultureInfo.InvariantCulture) + "\" transform=\"rotate(-90 84 84)\"/></svg><div class=\"num\"><strong>" + finalScore + "</strong><span>/ 100 好感信号</span></div></div></div>");
-            b.AppendLine("<div><div><span class=\"pill\">" + TextKit.Html(r.Trend) + "</span><span class=\"pill\">" + TextKit.Html(s.Stage) + "</span></div><div class=\"label\">" + TextKit.Html(r.Label) + "</div><div class=\"muted\">" + TextKit.Html(s.MeName) + "  ×  " + TextKit.Html(s.CrushName) + " · " + TextKit.Html(s.Model) + " · " + TextKit.Html(Scoring.Explain(r)) + "</div><div class=\"headline\">" + TextKit.Html(r.Headline) + "</div><p class=\"summary\">" + TextKit.Html(r.Summary) + "</p></div></div>");
+            b.AppendLine("<div class=\"card hero\"><div class=\"score\"><div class=\"ring\"><svg width=\"168\" height=\"168\" viewBox=\"0 0 168 168\"><circle cx=\"84\" cy=\"84\" r=\"73\" fill=\"none\" stroke=\"#f1e7e2\" stroke-width=\"10\"/><circle cx=\"84\" cy=\"84\" r=\"73\" fill=\"none\" stroke=\"" + scoreColor + "\" stroke-width=\"10\" stroke-linecap=\"round\" stroke-dasharray=\"" + dash.ToString("0.##", CultureInfo.InvariantCulture) + " " + circumference.ToString("0.##", CultureInfo.InvariantCulture) + "\" transform=\"rotate(-90 84 84)\"/></svg><div class=\"num\"><strong>" + finalScore + "</strong><span>/ 100 " + (couple ? "关系连接" : "好感信号") + "</span></div></div></div>");
+            b.AppendLine("<div><div><span class=\"pill\">" + (couple ? "情侣关系" : "Crush 心动") + "</span><span class=\"pill\">" + TextKit.Html(r.Trend) + "</span><span class=\"pill\">" + TextKit.Html(s.Stage) + "</span></div><div class=\"label\">" + TextKit.Html(r.Label) + "</div><div class=\"muted\">" + TextKit.Html(s.MeName) + "  ×  " + TextKit.Html(s.CrushName) + " · " + TextKit.Html(s.Model) + " · " + TextKit.Html(Scoring.Explain(r)) + "</div><div class=\"headline\">" + TextKit.Html(r.Headline) + "</div><p class=\"summary\">" + TextKit.Html(r.Summary) + "</p></div></div>");
 
-            b.AppendLine("<div class=\"card\"><h2>六个行为维度</h2><div class=\"dims\">");
-            string[] keys = new string[] { "initiative", "engagement", "care", "openness", "intimacy", "action" };
-            string[] labels = new string[] { "主动延续", "回应投入", "关心体贴", "自我开放", "亲密表达", "实际行动" };
-            for (int i = 0; i < keys.Length; i++)
+            b.AppendLine("<div class=\"card\"><h2>" + (couple ? "关系六维" : "六个行为维度") + "</h2><div class=\"dims\">");
+            DimensionDef[] defs = Scoring.Dimensions(couple ? Scoring.CoupleMode : Scoring.CrushMode);
+            for (int i = 0; i < defs.Length; i++)
             {
                 int val = 0;
-                if (!r.Dimensions.TryGetValue(keys[i], out val)) val = finalScore;
-                b.AppendLine("<div class=\"dim\"><span>" + labels[i] + "</span><div class=\"bar\"><i style=\"width:" + val + "%\"></i></div><b>" + val + "</b></div>");
+                if (!r.Dimensions.TryGetValue(defs[i].Key, out val)) val = finalScore;
+                b.AppendLine("<div class=\"dim\"><span>" + defs[i].Label + "</span><div class=\"bar\"><i style=\"width:" + val + "%\"></i></div><b>" + val + "</b></div>");
             }
             b.AppendLine("</div></div>");
 
-            b.AppendLine("<div class=\"card\"><h2>心动信号 / GREEN FLAGS</h2>");
+            b.AppendLine("<div class=\"card\"><h2>" + (couple ? "关系信号 / GREEN FLAGS" : "心动信号 / GREEN FLAGS") + "</h2>");
             if (r.Signals.Count == 0) b.AppendLine("<p class=\"muted\">这次样本里没有足够明确的信号。</p>");
             for (int i = 0; i < r.Signals.Count; i++)
             {
@@ -81,7 +81,7 @@ namespace CrushLens
             for (int i = 0; i < r.Cautions.Count; i++) b.AppendLine("<li>" + TextKit.Html(r.Cautions[i]) + "</li>");
             b.AppendLine("</ul></div></div>");
 
-            b.AppendLine("<div class=\"card\"><h2>怎么回 / NEXT MOVE</h2><div class=\"grade\"><div class=\"gradebox\">" + TextKit.Html(r.ReplyGrade) + "</div><div><b>回复表现</b><p class=\"summary\">" + TextKit.Html(r.ReplyGradeReason) + "</p></div></div>");
+            b.AppendLine("<div class=\"card\"><h2>" + (couple ? "怎么沟通 / NEXT MOVE" : "怎么回 / NEXT MOVE") + "</h2><div class=\"grade\"><div class=\"gradebox\">" + TextKit.Html(r.ReplyGrade) + "</div><div><b>" + (couple ? "沟通表现" : "回复表现") + "</b><p class=\"summary\">" + TextKit.Html(r.ReplyGradeReason) + "</p></div></div>");
             if (!string.IsNullOrEmpty(r.NextMessage)) b.AppendLine("<div class=\"next\">“" + TextKit.Html(r.NextMessage) + "”</div>");
             b.AppendLine("<div class=\"advice\" style=\"margin-top:16px\">");
             for (int i = 0; i < r.Advice.Count; i++)
@@ -102,7 +102,7 @@ namespace CrushLens
             if (s.Media != null && s.Media.Count > 0) AddStat(b, s.Media.Count.ToString(), "图片附件");
             b.AppendLine("</div><div class=\"disclaimer\">" + TextKit.Html(r.Disclaimer) + "</div></div>");
 
-            b.AppendLine("<div class=\"footer\">CrushLens 心动镜 · 本地生成 · 不构成心理诊断或关系承诺<br/>AI 分析仅基于本次聊天节选；真实感受与边界，永远以面对面沟通为准。</div>");
+            b.AppendLine("<div class=\"footer\">CrushLens 心动镜 · 本地生成 · 不构成心理诊断或关系承诺<br/>AI 分析仅基于本次聊天节选；" + (couple ? "关系里的真实感受、边界与安全，永远以面对面沟通为准。" : "真实感受与边界，永远以面对面沟通为准。") + "</div>");
             b.AppendLine("</div></body></html>");
             return b.ToString();
         }

@@ -172,7 +172,7 @@ namespace CrushLens
             TextRenderer.DrawText(g, "功能灵感来自开源项目 Crush Monitor 与 ChatLab；本工具的界面与实现为独立编写。", Theme.Tiny,
                 new Rectangle(0, y, w, 20), Palette.MutedLight,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            TextRenderer.DrawText(g, "CrushLens v1.1 · portable · 不安装、不写注册表、不上传云端", Theme.Tiny,
+            TextRenderer.DrawText(g, "CrushLens v1.2 · portable · 不安装、不写注册表、不上传云端", Theme.Tiny,
                 new Rectangle(0, y + 20, w, 20), Palette.MutedLight,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         }

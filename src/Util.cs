@@ -358,7 +358,7 @@ namespace CrushLens
     {
         public const string Name = "CrushLens";
         public const string ChineseName = "心动镜";
-        public const string Version = "1.1.0";
+        public const string Version = "1.2.0";
         public const string Tagline = "本地聊天好感度分析";
     }
 

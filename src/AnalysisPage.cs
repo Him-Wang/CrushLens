@@ -33,6 +33,7 @@ namespace CrushLens
         private readonly ComboBox _meCombo;
         private readonly ComboBox _crushCombo;
         private readonly ComboBox _stageCombo;
+        private readonly ComboBox _modeCombo;
         private readonly ComboBox _limitCombo;
         private readonly Label _meLabel;
         private readonly Label _crushLabel;
@@ -58,6 +59,8 @@ namespace CrushLens
         private CancellationTokenSource _cts;
         private bool _analyzing;
         private int _phaseIndex;
+        private string _mode = Scoring.CrushMode;
+        private bool _suppressMode;
 
         public void CancelWork()
         {
@@ -190,9 +193,13 @@ namespace CrushLens
             _crushCombo = MakeCombo();
             _stageCombo = MakeCombo();
             _limitCombo = MakeCombo();
+            _modeCombo = MakeCombo();
             _meCombo.SelectedIndexChanged += ParticipantChanged;
             _crushCombo.SelectedIndexChanged += ParticipantChanged;
-            _stageCombo.Items.AddRange(new object[] { "刚认识", "暧昧中", "恋爱中", "拉扯期", "已表白", "冷淡期" });
+            _modeCombo.Items.AddRange(new object[] { "Crush 心动", "情侣关系" });
+            _modeCombo.SelectedIndex = 0;
+            _modeCombo.SelectedIndexChanged += ModeChanged;
+            _stageCombo.Items.AddRange(Scoring.Stages(Scoring.CrushMode));
             _stageCombo.SelectedIndex = 1;
             _limitCombo.Items.AddRange(new object[] { "最近 80 条", "最近 120 条", "最近 200 条" });
             _limitCombo.SelectedIndex = 1;
@@ -200,6 +207,7 @@ namespace CrushLens
             _inputCard.Controls.Add(_crushCombo);
             _inputCard.Controls.Add(_stageCombo);
             _inputCard.Controls.Add(_limitCombo);
+            _inputCard.Controls.Add(_modeCombo);
 
             _privacyNote = new NoteBox();
             _privacyNote.Title = "关于隐私";
@@ -247,7 +255,7 @@ namespace CrushLens
             Resize += PageResize;
             DragEnter += DragEnterFile;
             DragDrop += DragDropFile;
-            _reportCanvas.SetEmpty();
+            _reportCanvas.SetEmpty(_mode);
             PageResize(null, EventArgs.Empty);
             UpdatePrivacyNote();
         }
@@ -317,6 +325,7 @@ namespace CrushLens
             int w = _inputCard.ClientSize.Width;
             int h = _inputCard.ClientSize.Height;
             if (w < 100 || h < 300) return;
+            _modeCombo.SetBounds(w - 224, 18, 118, 24);
             _sampleLink.SetBounds(w - 94, 18, 74, 22);
             _inputBox.SetBounds(20, 66, w - 40, Math.Max(96, h - 412));
             _mediaPicker.SetBounds(20, _inputBox.Bottom + 8, w - 40, 82);
@@ -379,7 +388,7 @@ namespace CrushLens
             if (_meCombo.Items.Count == 0)
             {
                 _meCombo.Items.Add("我");
-                _crushCombo.Items.Add("对方");
+                _crushCombo.Items.Add(Scoring.OtherDefaultName(_mode));
             }
             if (_meCombo.SelectedIndex < 0 && _meCombo.Items.Count > 0) _meCombo.SelectedIndex = 0;
             if (_crushCombo.SelectedIndex < 0 && _crushCombo.Items.Count > 0)
@@ -413,6 +422,10 @@ namespace CrushLens
                     _parseStatus.ForeColor = Palette.Muted;
                     _meCombo.Items.Clear();
                     _crushCombo.Items.Clear();
+                    _meCombo.Items.Add("我");
+                    _crushCombo.Items.Add(Scoring.OtherDefaultName(_mode));
+                    _meCombo.SelectedIndex = 0;
+                    _crushCombo.SelectedIndex = 0;
                 }
                 UpdateAnalyzeEnabled();
                 return;
@@ -521,6 +534,53 @@ namespace CrushLens
             if (!string.IsNullOrEmpty(crush)) _crushCombo.SelectedItem = crush;
         }
 
+        private void ModeChanged(object sender, EventArgs e)
+        {
+            if (_suppressMode) return;
+            _mode = _modeCombo.SelectedIndex == 1 ? Scoring.CoupleMode : Scoring.CrushMode;
+            ApplyModeUi(true);
+            UpdatePrivacyNote();
+            UpdateAnalyzeEnabled();
+        }
+
+        private void SetMode(string mode, bool resetStage)
+        {
+            _suppressMode = true;
+            _mode = Scoring.NormalizeMode(mode);
+            _modeCombo.SelectedIndex = Scoring.IsCouple(_mode) ? 1 : 0;
+            _suppressMode = false;
+            ApplyModeUi(resetStage);
+        }
+
+        private void ApplyModeUi(bool resetStage)
+        {
+            bool couple = Scoring.IsCouple(_mode);
+            _subtitle.Text = couple
+                ? "把一段关系里的聊天，变成一份看得懂、不过度诊断的连接报告。"
+                : "把一段聊天，变成一份看得懂、不过度解读的心动报告。";
+            _crushLabel.Text = couple ? "伴侣是" : "对方是";
+            string current = _stageCombo.SelectedItem as string;
+            string[] stages = Scoring.Stages(_mode);
+            _stageCombo.Items.Clear();
+            _stageCombo.Items.AddRange(stages);
+            int existing = Array.IndexOf(stages, current);
+            if (!resetStage && existing >= 0) _stageCombo.SelectedIndex = existing;
+            else _stageCombo.SelectedItem = Scoring.DefaultStage(_mode);
+            _inputBox.PlaceholderText = couple
+                ? "把你们的聊天记录粘贴到这里…\n\n也可以直接拖入 .txt / .json，并在下方添加截图或表情包。"
+                : "把聊天记录粘贴到这里…\n\n支持微信、QQ、WhatsApp 与「昵称: 内容」通用文本，\n也可以直接拖入 .txt / .json，并在下方添加截图或表情包。";
+            if (string.IsNullOrWhiteSpace(_inputBox.Text) && (_mediaPicker == null || _mediaPicker.Count == 0))
+            {
+                _meCombo.Items.Clear();
+                _crushCombo.Items.Clear();
+                _meCombo.Items.Add("我");
+                _crushCombo.Items.Add(Scoring.OtherDefaultName(_mode));
+                _meCombo.SelectedIndex = 0;
+                _crushCombo.SelectedIndex = 0;
+            }
+            if (_inputCard.Visible && _session == null) _reportCanvas.SetEmpty(_mode);
+        }
+
         private void ParticipantChanged(object sender, EventArgs e)
         {
             UpdateAnalyzeEnabled();
@@ -626,6 +686,7 @@ namespace CrushLens
             session.Title = me + "  ×  " + crush;
             session.MeName = me;
             session.CrushName = crush;
+            session.Mode = _mode;
             session.Stage = _stageCombo.SelectedItem as string;
             session.RawText = _inputBox.Text;
             session.Provider = Settings.Provider;
@@ -695,7 +756,7 @@ namespace CrushLens
                 if (IsDisposed) return;
                 ChatSession canceled = _session;
                 _session = null;
-                _reportCanvas.SetEmpty();
+                _reportCanvas.SetEmpty(_mode);
                 ShowInput(canceled != null ? canceled.RawText : "", canceled != null ? canceled.Media : null);
                 if (Toast != null) Toast("已取消分析。");
             }
@@ -743,12 +804,15 @@ namespace CrushLens
 
         private void ShowChat(ChatSession session)
         {
+            if (session != null) SetMode(session.Mode, false);
             _inputCard.Visible = false;
             _chatCard.Visible = true;
             _chatCanvas.SetSession(session);
             int selected = _chatCanvas.ShownMessages;
             int mediaCount = session.Media != null ? session.Media.Count : 0;
-            _chatTitle.Text = selected == 0 && mediaCount > 0 ? "图片 / 表情包" : "聊天逐句";
+            _chatTitle.Text = selected == 0 && mediaCount > 0
+                ? "图片 / 表情包"
+                : (Scoring.IsCouple(session.Mode) ? "关系对话" : "聊天逐句");
             string meta;
             if (selected == 0 && mediaCount > 0)
             {
@@ -777,7 +841,7 @@ namespace CrushLens
             _inputCard.Visible = true;
             _chatCard.Visible = false;
             _chatCanvas.Clear();
-            _reportCanvas.SetEmpty();
+            _reportCanvas.SetEmpty(_mode);
             _exportButton.Enabled = false;
             _editButton.Visible = false;
             _session = null;
@@ -800,6 +864,7 @@ namespace CrushLens
                 return;
             }
             ShowInput("", null);
+            SetMode(_mode, true);
         }
 
         public void EditCurrent()
@@ -807,12 +872,18 @@ namespace CrushLens
             if (_analyzing) return;
             string raw = "";
             List<ChatMedia> media = null;
+            string mode = _mode;
+            string stage = _stageCombo.SelectedItem as string;
             if (_session != null)
             {
                 raw = !string.IsNullOrEmpty(_session.RawText) ? _session.RawText : SessionToRaw(_session);
                 media = _session.Media;
+                mode = _session.Mode;
+                stage = _session.Stage;
             }
             ShowInput(raw, media);
+            SetMode(mode, true);
+            if (!string.IsNullOrEmpty(stage)) _stageCombo.SelectedItem = stage;
         }
 
         private string SessionToRaw(ChatSession s)
@@ -835,6 +906,7 @@ namespace CrushLens
             if (session.Media == null) session.Media = new List<ChatMedia>();
             Storage.LoadMedia(session);
             session.Stats = StatsEngine.Compute(session.Messages, session.MeName, session.CrushName);
+            SetMode(session.Mode, true);
             _stageCombo.SelectedItem = session.Stage;
             _meCombo.Items.Clear();
             _crushCombo.Items.Clear();

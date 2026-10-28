@@ -19,6 +19,7 @@ namespace CrushLens
         public event Action<string> CopyRequested;
 
         private ReportMode _mode = ReportMode.Empty;
+        private string _emptyMode = Scoring.CrushMode;
         private AiReport _report;
         private ChatSession _session;
         private string _error = "";
@@ -55,6 +56,12 @@ namespace CrushLens
 
         public void SetEmpty()
         {
+            SetEmpty(Scoring.CrushMode);
+        }
+
+        public void SetEmpty(string mode)
+        {
+            _emptyMode = Scoring.NormalizeMode(mode);
             _mode = ReportMode.Empty;
             _report = null;
             _session = null;
@@ -236,14 +243,19 @@ namespace CrushLens
             using (GraphicsPath hp = Ui.Heart(new RectangleF(cx - 17, 87, 34, 30)))
             using (SolidBrush b = new SolidBrush(Color.FromArgb(245, 210, 216)))
                 g.FillPath(b, hp);
-            TextRenderer.DrawText(g, "先读懂，再靠近", Theme.H2, new Rectangle(0, 174, w, 30), Palette.Ink, Ui.Center);
-            TextRenderer.DrawText(g, "粘贴一段聊天，CrushLens 会结合行为统计与 AI 判断，\n给你一份不夸张、可执行的好感度报告。", Theme.Small,
+            bool couple = Scoring.IsCouple(_emptyMode);
+            TextRenderer.DrawText(g, couple ? "先理解，再靠近" : "先读懂，再靠近", Theme.H2,
+                new Rectangle(0, 174, w, 30), Palette.Ink, Ui.Center);
+            TextRenderer.DrawText(g, couple
+                    ? "把你们的聊天放进来，CrushLens 会结合行为统计与 AI 判断，\n给你一份不夸张、可沟通的关系报告。"
+                    : "粘贴一段聊天，CrushLens 会结合行为统计与 AI 判断，\n给你一份不夸张、可执行的好感度报告。", Theme.Small,
                 new Rectangle(24, 212, w - 48, 48), Palette.Muted, Ui.WrapCenter);
 
             int sy = 286;
-            DrawStep(g, w, sy, "01", "粘贴或导入聊天", "支持微信、QQ、WhatsApp 与通用文本");
+            DrawStep(g, w, sy, "01", couple ? "粘贴或导入聊天" : "粘贴或导入聊天", "支持微信、QQ、WhatsApp 与通用文本");
             DrawStep(g, w, sy + 52, "02", "配置自己的 API Key", "密钥只留本机，AI 只收到本次节选");
-            DrawStep(g, w, sy + 104, "03", "拿到报告与下一步", "好感度、六个维度、回复建议");
+            DrawStep(g, w, sy + 104, "03", couple ? "拿到关系报告" : "拿到报告与下一步",
+                couple ? "关系六维、沟通建议与边界提醒" : "好感度、六个维度、回复建议");
 
             RectangleF note = new RectangleF(20, sy + 172, w - 40, 54);
             Ui.FillRound(g, note, 10f, Palette.Bg);
@@ -304,7 +316,7 @@ namespace CrushLens
 
         private void PaintScore(Graphics g, RectangleF card)
         {
-            TextRenderer.DrawText(g, "好感度  /  AFFECTION SCORE", Theme.Tiny,
+            TextRenderer.DrawText(g, Scoring.Caption(_report.Mode), Theme.Tiny,
                 new Rectangle((int)card.X + 20, (int)card.Y + 16, (int)card.Width - 40, 18), Palette.Muted,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
 
@@ -330,7 +342,7 @@ namespace CrushLens
                 new Rectangle((int)ringX, (int)ringY + 22, (int)ring, 50), sc, Ui.Center);
             TextRenderer.DrawText(g, "/ 100", Theme.Tiny,
                 new Rectangle((int)ringX, (int)ringY + 68, (int)ring, 16), Palette.Muted, Ui.Center);
-            TextRenderer.DrawText(g, "互动好感信号", Theme.Tiny,
+            TextRenderer.DrawText(g, Scoring.IsCouple(_report.Mode) ? "关系连接信号" : "互动好感信号", Theme.Tiny,
                 new Rectangle((int)ringX - 8, (int)ringY + 112, (int)ring + 16, 16), Palette.Muted, Ui.Center);
 
             int rx = (int)card.X + 150;
@@ -361,21 +373,21 @@ namespace CrushLens
 
         private void PaintDimensions(Graphics g, RectangleF card)
         {
-            TextRenderer.DrawText(g, "六个维度", Theme.H3, new Rectangle((int)card.X + 20, (int)card.Y + 16, 140, 24),
+            bool couple = Scoring.IsCouple(_report.Mode);
+            TextRenderer.DrawText(g, couple ? "关系六维" : "六个维度", Theme.H3, new Rectangle((int)card.X + 20, (int)card.Y + 16, 140, 24),
                 Palette.Ink, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            TextRenderer.DrawText(g, "行为信号，不是心理测量", Theme.Tiny,
+            TextRenderer.DrawText(g, couple ? "互动模式，不是心理诊断" : "行为信号，不是心理测量", Theme.Tiny,
                 new Rectangle((int)card.X + 120, (int)card.Y + 18, (int)card.Width - 140, 20), Palette.Muted,
                 TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
 
-            string[] keys = new string[] { "initiative", "engagement", "care", "openness", "intimacy", "action" };
-            string[] labels = new string[] { "主动延续", "回应投入", "关心体贴", "自我开放", "亲密表达", "实际行动" };
+            DimensionDef[] defs = Scoring.Dimensions(_report.Mode);
             Color[] colors = new Color[] { Palette.Rose, Color.FromArgb(225, 125, 108), Palette.Peach, Palette.Amber, Color.FromArgb(180, 119, 142), Palette.Blue };
             int y = (int)card.Y + 48;
-            for (int i = 0; i < keys.Length; i++)
+            for (int i = 0; i < defs.Length; i++)
             {
                 int val = 0;
-                if (!_report.Dimensions.TryGetValue(keys[i], out val)) val = Scoring.GetScore(_report);
-                TextRenderer.DrawText(g, labels[i], Theme.Small, new Rectangle((int)card.X + 20, y, 66, 22), Palette.InkSoft,
+                if (!_report.Dimensions.TryGetValue(defs[i].Key, out val)) val = Scoring.GetScore(_report);
+                TextRenderer.DrawText(g, defs[i].Label, Theme.Small, new Rectangle((int)card.X + 20, y, 70, 22), Palette.InkSoft,
                     TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
                 int bx = (int)card.X + 88;
                 int bw = (int)card.Width - 88 - 48;
@@ -416,7 +428,7 @@ namespace CrushLens
 
         private void PaintSignals(Graphics g, RectangleF card)
         {
-            TextRenderer.DrawText(g, "心动信号  /  GREEN FLAGS", Theme.Tiny,
+            TextRenderer.DrawText(g, Scoring.IsCouple(_report.Mode) ? "关系信号  /  GREEN FLAGS" : "心动信号  /  GREEN FLAGS", Theme.Tiny,
                 new Rectangle((int)card.X + 20, (int)card.Y + 16, (int)card.Width - 40, 20), Palette.Green,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
             int y = (int)card.Y + 44;
@@ -475,7 +487,7 @@ namespace CrushLens
 
         private void PaintReply(Graphics g, RectangleF card)
         {
-            TextRenderer.DrawText(g, "怎么回  /  NEXT MOVE", Theme.Tiny,
+            TextRenderer.DrawText(g, Scoring.IsCouple(_report.Mode) ? "怎么沟通  /  NEXT MOVE" : "怎么回  /  NEXT MOVE", Theme.Tiny,
                 new Rectangle((int)card.X + 20, (int)card.Y + 16, (int)card.Width - 40, 20), Palette.Rose,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
 
@@ -484,7 +496,7 @@ namespace CrushLens
             Ui.FillRound(g, new RectangleF(card.X + 20, y, 48, 48), 12f, Ui.ScoreSoft(Scoring.GetScore(_report)));
             TextRenderer.DrawText(g, _report.ReplyGrade, new Font(Theme.FontFamily, 18f, FontStyle.Bold),
                 new Rectangle((int)card.X + 20, y, 48, 48), gradeColor, Ui.Center);
-            TextRenderer.DrawText(g, "回复表现", Theme.SmallBold,
+            TextRenderer.DrawText(g, Scoring.IsCouple(_report.Mode) ? "沟通表现" : "回复表现", Theme.SmallBold,
                 new Rectangle((int)card.X + 78, y + 1, (int)card.Width - 100, 20), Palette.Ink,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
             int reasonH = Ui.Measure(g, _report.ReplyGradeReason, Theme.Small, (int)card.Width - 105, Ui.Wrap).Height;
@@ -492,7 +504,7 @@ namespace CrushLens
                 new Rectangle((int)card.X + 78, y + 22, (int)card.Width - 100, reasonH), Palette.InkSoft, Ui.Wrap);
             y += Math.Max(58, reasonH + 34);
 
-            TextRenderer.DrawText(g, "可以这样发", Theme.SmallBold,
+            TextRenderer.DrawText(g, Scoring.IsCouple(_report.Mode) ? "可以这样说" : "可以这样发", Theme.SmallBold,
                 new Rectangle((int)card.X + 20, y, 100, 20), Palette.RoseDark,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
             y += 24;
