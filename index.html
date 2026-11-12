@@ -1,0 +1,1803 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<script>try{var _t=localStorage.getItem("crushlens.theme.v1")||"paper";document.documentElement.setAttribute("data-theme",_t);}catch(e){document.documentElement.setAttribute("data-theme","paper");}</script>
+<title>心动镜 · 网页版 | CrushLens</title>
+<meta name="description" content="本地优先的聊天好感度分析工具网页版：聊天统计在本机计算，AI 报告使用你自己的 API Key。">
+<style>
+:root{
+  --bg:#100d0c; --surface:#181412; --surface-2:#201a17; --surface-3:#292219;
+  --line:#2e2723; --line-soft:#241e1b; --line-hi:#3a322d;
+  --text:#f4ece6; --text-2:#d8ccc3; --muted:#a2968c; --faint:#8d8078;
+  --accent:#e4556b; --accent-2:#f07a8c; --accent-soft:rgba(228,85,107,.14);
+  --accent-line:rgba(228,85,107,.25); --accent-weak:rgba(228,85,107,.35);
+  --gold:#d9a55f; --gold-soft:rgba(217,165,95,.14); --bar-b:#d9a55f;
+  --ok:#5fbf94; --warn:#e0a75a; --danger:#e06a5a;
+  --field-bg:#0d0b0a; --placeholder:#8d8078; --next-text:#ffdfe4;
+  --glow-a:rgba(228,85,107,.10); --glow-b:rgba(217,165,95,.06);
+  --topbar-a:rgba(16,13,12,.96); --topbar-b:rgba(16,13,12,.72);
+  --panel-end:#141110; --inset-hi:rgba(255,255,255,.05);
+  --btn-start:#f06a7e; --btn-line:#f48194; --btn-text:#2a0a10;
+  --btn-shadow:0 10px 26px -12px rgba(228,85,107,.9);
+  --skel-1:#1e1816; --skel-2:#2a221f;
+  --r-sm:8px; --r-md:12px; --r-lg:18px; --r-xl:26px;
+  --sp:4px;
+  --shadow:0 24px 60px -30px rgba(0,0,0,.9);
+  --font:"PingFang SC","HarmonyOS Sans SC","MiSans","Microsoft YaHei",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,monospace;
+  --ease:cubic-bezier(.2,.8,.2,1);
+}
+
+/* ---------- 主题 ---------- */
+html[data-theme="ink"]{
+  --bg:#0a0e15; --surface:#10161f; --surface-2:#161f2b; --surface-3:#1d2937;
+  --line:#22303f; --line-soft:#18222e; --line-hi:#33455a;
+  --text:#e9f0f9; --text-2:#c7d5e5; --muted:#9aabbf; --faint:#8496aa;
+  --accent:#5b8def; --accent-2:#8fb2ff; --accent-soft:rgba(91,141,239,.16);
+  --accent-line:rgba(91,141,239,.28); --accent-weak:rgba(91,141,239,.35);
+  --gold:#cfa96a; --gold-soft:rgba(207,169,106,.14);
+  --ok:#52c08e; --warn:#e0a75a; --danger:#e0685f;
+  --field-bg:#0a0f17; --placeholder:#8496aa; --next-text:#dbe7ff;
+  --glow-a:rgba(91,141,239,.12); --glow-b:rgba(207,169,106,.06);
+  --topbar-a:rgba(10,14,21,.96); --topbar-b:rgba(10,14,21,.72);
+  --panel-end:#0d1219; --inset-hi:rgba(255,255,255,.05);
+  --btn-start:#7aa2f7; --btn-line:#8fb2ff; --btn-text:#08101d;
+  --btn-shadow:0 10px 26px -12px rgba(91,141,239,.9);
+  --skel-1:#131b25; --skel-2:#1c2735;
+  --shadow:0 24px 60px -30px rgba(0,0,0,.9);
+}
+html[data-theme="moss"]{
+  --bg:#0a100d; --surface:#101713; --surface-2:#16201a; --surface-3:#1d2a22;
+  --line:#223029; --line-soft:#18231d; --line-hi:#2f4539;
+  --text:#e8f2ec; --text-2:#c8dccf; --muted:#9ab0a2; --faint:#84a08f;
+  --accent:#4fbf8f; --accent-2:#7fd9b0; --accent-soft:rgba(79,191,143,.15);
+  --accent-line:rgba(79,191,143,.28); --accent-weak:rgba(79,191,143,.35);
+  --gold:#d4b168; --gold-soft:rgba(212,177,104,.14);
+  --ok:#4fbf8f; --warn:#e0a75a; --danger:#e0685f;
+  --field-bg:#0a110d; --placeholder:#84a08f; --next-text:#d8f4e6;
+  --glow-a:rgba(79,191,143,.11); --glow-b:rgba(212,177,104,.06);
+  --topbar-a:rgba(10,16,13,.96); --topbar-b:rgba(10,16,13,.72);
+  --panel-end:#0d130f; --inset-hi:rgba(255,255,255,.05);
+  --btn-start:#64cf9f; --btn-line:#7fd9b0; --btn-text:#061410;
+  --btn-shadow:0 10px 26px -12px rgba(79,191,143,.85);
+  --skel-1:#131c16; --skel-2:#1b2820;
+  --shadow:0 24px 60px -30px rgba(0,0,0,.9);
+}
+html[data-theme="paper"]{
+  --bg:#f7f3ef; --surface:#ffffff; --surface-2:#fbf7f4; --surface-3:#f1eae4;
+  --line:#e6dcd3; --line-soft:#efe6de; --line-hi:#d8cbc0;
+  --text:#241d1a; --text-2:#43382f; --muted:#6b5d53; --faint:#7a6b60;
+  --accent:#c8445c; --accent-2:#a8324a; --accent-soft:rgba(200,68,92,.09);
+  --accent-line:rgba(200,68,92,.26); --accent-weak:rgba(200,68,92,.32);
+  --gold:#8f6320; --gold-soft:rgba(143,99,32,.10); --bar-b:#d9865f;
+  --ok:#2f8f6a; --warn:#a8762a; --danger:#b23f38;
+  --field-bg:#ffffff; --placeholder:#8a7a70; --next-text:#7d2437;
+  --glow-a:rgba(200,68,92,.09); --glow-b:rgba(169,118,44,.07);
+  --topbar-a:rgba(247,243,239,.96); --topbar-b:rgba(247,243,239,.70);
+  --panel-end:#fdfaf7; --inset-hi:rgba(0,0,0,.04);
+  --btn-start:#d95a71; --btn-line:#c8445c; --btn-text:#ffffff;
+  --btn-shadow:0 10px 24px -14px rgba(200,68,92,.6);
+  --skel-1:#efe7e0; --skel-2:#f8f2ec;
+  --shadow:0 18px 40px -26px rgba(60,40,30,.35);
+}
+html[data-theme="mist"]{
+  --bg:#f4f6f9; --surface:#ffffff; --surface-2:#f8fafc; --surface-3:#eef1f6;
+  --line:#dfe5ec; --line-soft:#e9eef4; --line-hi:#cdd6e2;
+  --text:#1c222b; --text-2:#3a4453; --muted:#5f6b7a; --faint:#6c7887;
+  --accent:#3d6fd0; --accent-2:#2b57ad; --accent-soft:rgba(61,111,208,.09);
+  --accent-line:rgba(61,111,208,.26); --accent-weak:rgba(61,111,208,.32);
+  --gold:#8a6520; --gold-soft:rgba(138,101,32,.10); --bar-b:#5f8fdc;
+  --ok:#2b8464; --warn:#9a6d22; --danger:#b23f38;
+  --field-bg:#ffffff; --placeholder:#7b8797; --next-text:#1f4a95;
+  --glow-a:rgba(61,111,208,.09); --glow-b:rgba(138,101,32,.06);
+  --topbar-a:rgba(244,246,249,.96); --topbar-b:rgba(244,246,249,.70);
+  --panel-end:#fbfcfe; --inset-hi:rgba(0,0,0,.04);
+  --btn-start:#5285e0; --btn-line:#3d6fd0; --btn-text:#ffffff;
+  --btn-shadow:0 10px 24px -14px rgba(61,111,208,.55);
+  --skel-1:#e7ecf3; --skel-2:#f5f8fb;
+  --shadow:0 18px 40px -26px rgba(30,45,70,.28);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:
+    radial-gradient(900px 520px at 78% -12%, var(--glow-a), transparent 62%),
+    radial-gradient(700px 420px at 8% 4%, var(--glow-b), transparent 60%),
+    var(--bg);
+  color:var(--text); font-family:var(--font); font-size:15px; line-height:1.65;
+  -webkit-font-smoothing:antialiased; min-height:100vh;
+}
+h1,h2,h3,h4{margin:0; font-weight:600; line-height:1.25; letter-spacing:-.01em}
+p{margin:0}
+button{font-family:inherit; color:inherit}
+a{color:var(--accent-2)}
+::selection{background:var(--accent-soft)}
+:focus-visible{outline:2px solid var(--accent-2); outline-offset:2px; border-radius:6px}
+
+.app{max-width:1280px; margin:0 auto; padding:0 24px 34px}
+@media(max-width:560px){ .app{padding-bottom:104px} }
+
+/* ---------- top bar ---------- */
+.topbar{
+  display:flex; align-items:center; gap:16px; padding:22px 0 18px;
+  position:sticky; top:0; z-index:30;
+  background:linear-gradient(180deg, var(--topbar-a) 55%, var(--topbar-b) 88%, transparent);
+  backdrop-filter:blur(8px);
+}
+.brand{display:flex; align-items:center; gap:12px; min-width:0}
+.mark{width:40px; height:40px; flex-shrink:0}
+.mark .ring-outer{stroke:var(--line-hi); fill:none}
+.mark .ov-a{stroke:var(--accent); fill:none}
+.mark .ov-b{stroke:var(--mark-b, var(--gold)); fill:none; opacity:.9}
+.brand h1{font-size:17px; letter-spacing:.01em; white-space:nowrap}
+.brand p{font-size:12px; color:var(--faint); letter-spacing:.16em; text-transform:uppercase; margin-top:1px}
+.spacer{flex:1}
+.nav{display:flex; gap:6px; align-items:center}
+
+/* ---------- buttons ---------- */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:7px;
+  min-height:38px; padding:0 14px; border-radius:10px; cursor:pointer;
+  border:1px solid var(--line); background:var(--surface); color:var(--text-2);
+  font-size:13px; font-weight:500; line-height:1; white-space:nowrap;
+  transition:background .18s var(--ease), border-color .18s var(--ease), color .18s var(--ease), transform .12s var(--ease);
+}
+.btn:hover{background:var(--surface-2); border-color:var(--line-hi); color:var(--text)}
+.btn:active{transform:translateY(1px)}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:8px}
+.btn:focus-visible, .seg button:focus-visible{outline-offset:1px}
+.btn[disabled]{opacity:.45; cursor:not-allowed}
+.btn.ghost{background:transparent; border-color:transparent; color:var(--muted)}
+.btn.ghost:hover{background:var(--surface); color:var(--text)}
+.btn.primary{
+  background:linear-gradient(180deg,var(--btn-start),var(--accent)); border-color:var(--btn-line); color:var(--btn-text);
+  font-weight:600; box-shadow:var(--btn-shadow), inset 0 1px 0 rgba(255,255,255,.18);
+}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn.block{width:100%; min-height:46px; font-size:15px; border-radius:12px}
+.btn.sm{min-height:32px; padding:0 10px; font-size:13px; border-radius:8px}
+.btn svg{width:16px; height:16px; flex-shrink:0}
+
+/* ---------- segmented ---------- */
+.seg{display:inline-flex; padding:3px; gap:3px; background:var(--surface); border:1px solid var(--line); border-radius:11px}
+.seg button{
+  appearance:none; border:0; background:transparent; color:var(--muted); cursor:pointer;
+  padding:7px 14px; border-radius:8px; font-size:13px; font-weight:500;
+  transition:background .18s var(--ease), color .18s var(--ease);
+}
+.seg button:hover{color:var(--text-2)}
+.seg button[aria-pressed="true"]{background:var(--surface-3); color:var(--text); font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,.06), inset 0 1px 0 var(--inset-hi)}
+.seg button[aria-pressed="true"] .dot{background:var(--accent)}
+
+/* ---------- layout ---------- */
+.layout{display:grid; grid-template-columns:minmax(0,1.02fr) minmax(0,.98fr); gap:22px; align-items:stretch}
+.panel{
+  background:linear-gradient(180deg, var(--surface) 0%, var(--panel-end) 100%);
+  border:1px solid var(--line); border-radius:var(--r-lg); box-shadow:var(--shadow);
+  overflow:hidden;
+}
+.panel-head{display:flex; align-items:center; gap:10px; padding:16px 20px 13px; border-bottom:1px solid var(--line-soft)}
+.panel-head h2{font-size:14px; letter-spacing:.02em; color:var(--text-2); white-space:nowrap}
+.panel-head .hint{font-size:12px; color:var(--faint); margin-left:auto; white-space:nowrap}
+.panel-body{padding:18px 20px 20px}
+
+/* ---------- input ---------- */
+.mode-row{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; flex-wrap:wrap}
+.mode-desc{font-size:13px; color:var(--muted); line-height:1.5}
+.mode-desc b{color:var(--text-2); font-weight:600}
+
+.field{margin-top:14px}
+.field > label{display:block; font-size:12px; color:var(--muted); letter-spacing:.02em; margin-bottom:7px}
+.row{display:flex; gap:10px; flex-wrap:wrap}
+.row > .field{flex:1; min-width:130px; margin-top:0}
+
+textarea#chat, .input, select{
+  width:100%; background:var(--field-bg); border:1px solid var(--line); color:var(--text);
+  border-radius:var(--r-md); padding:12px 13px; font-size:13px; line-height:1.7;
+  transition:border-color .18s var(--ease), background .18s var(--ease);
+}
+textarea#chat{min-height:188px; resize:vertical; font-family:var(--mono); font-size:13px}
+textarea#chat:focus, .input:focus, select:focus{outline:none; border-color:var(--line-hi); background:var(--field-bg)}
+textarea#chat::placeholder{color:var(--placeholder)}
+select{appearance:none; cursor:pointer; padding-right:32px;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23a2968c' stroke-width='2' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat:no-repeat; background-position:right 11px center;
+}
+select option{background:var(--surface); color:var(--text)}
+
+.drop{position:relative; margin-top:12px; border:1px dashed var(--line-hi); border-radius:var(--r-md); padding:10px 12px;
+  display:flex; align-items:center; gap:10px; color:var(--muted); font-size:13px; cursor:pointer;
+  transition:border-color .18s var(--ease), background .18s var(--ease)}
+.drop:hover, .drop.over{border-color:var(--accent); background:var(--accent-soft); color:var(--text-2)}
+.drop input{position:absolute; inset:0; opacity:0; cursor:pointer}
+.drop svg{width:17px; height:17px; flex-shrink:0}
+
+.thumbs{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px}
+.thumb{position:relative; width:58px; height:58px; border-radius:9px; overflow:hidden; border:1px solid var(--line)}
+.thumb img{width:100%; height:100%; object-fit:cover; display:block}
+.thumb button{position:absolute; top:2px; right:2px; width:24px; height:24px; padding:0; border-radius:50%;
+  border:0; background:rgba(0,0,0,.7); color:#fff; font-size:12px; line-height:1; cursor:pointer}
+.analyze-bar{display:flex; align-items:center; gap:12px; margin-top:14px}
+.analyze-bar .meta{font-size:12px; color:var(--faint); line-height:1.45}
+.analyze-bar .meta b{color:var(--text-2); font-weight:600}
+
+/* ---------- result ---------- */
+.result-panel{min-height:520px; display:flex; flex-direction:column}
+@media (min-width:981px){.layout>.panel:first-child{align-self:start; position:sticky; top:96px; max-height:calc(100vh - 112px); display:flex; flex-direction:column}.layout>.panel:first-child .panel-body{overflow:auto; min-height:0}}
+.empty{padding:52px 30px 40px; text-align:center; margin:auto}
+.empty .rings{width:104px; height:104px; margin:0 auto 20px; color:var(--accent); opacity:.9}
+.empty h3{font-size:20px; letter-spacing:-.01em; margin-bottom:10px}
+.empty p{font-size:14px; color:var(--muted); max-width:30em; margin:0 auto 4px; line-height:1.75}
+.empty .steps{display:flex; justify-content:center; gap:8px; flex-wrap:wrap; margin-top:22px}
+.empty .demo-row{display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-top:22px}
+.step{font-size:12px; color:var(--muted); display:flex; gap:7px; align-items:center; padding:6px 11px; border:1px solid var(--line-soft); border-radius:999px; background:var(--surface)}
+.step i{font-style:normal; width:18px; height:18px; border-radius:50%; border:1px solid var(--line);
+  display:grid; place-items:center; font-size:12px; color:var(--muted)}
+
+.score-head{display:flex; align-items:center; gap:18px; padding:18px 20px; border-bottom:1px solid var(--line-soft)}
+.ring-wrap{position:relative; width:112px; height:112px; flex-shrink:0}
+.ring-wrap svg{transform:rotate(-90deg)}
+.ring-bg{fill:none; stroke:var(--track,var(--line)); stroke-width:5}
+.ring-fg{fill:none; stroke:url(#ringGrad); stroke-width:5; stroke-linecap:round; transition:stroke-dashoffset 1s var(--ease)}
+.ring-num{position:absolute; inset:0; display:grid; place-content:center; text-align:center}
+.ring-num b{font-size:31px; font-weight:600; letter-spacing:-.03em; line-height:1; font-variant-numeric:tabular-nums}
+.ring-num span{font-size:12px; color:var(--faint); letter-spacing:.12em}
+.score-meta{min-width:0}
+.score-meta .tag{display:inline-flex; align-items:center; gap:6px; font-size:12px; letter-spacing:.1em;
+  color:var(--gold); background:var(--gold-soft); border:1px solid rgba(217,165,95,.25);
+  padding:3px 9px; border-radius:100px; margin-bottom:9px; font-size:12px}
+.score-meta h2{font-size:19px; margin-bottom:6px}
+.score-meta p{font-size:13px; color:var(--muted); line-height:1.6; max-width:34em}
+.raw{font-size:12px; color:var(--faint); margin-top:6px}
+
+.tiles{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--line-soft)}
+.tile{background:var(--surface); padding:13px 15px}
+.tile .k{font-size:12px; letter-spacing:.09em; color:var(--faint); text-transform:uppercase}
+.tile .v{font-size:17px; font-weight:600; margin-top:3px; letter-spacing:-.02em; font-variant-numeric:tabular-nums}
+.tile .v small{font-size:12px; color:var(--muted); font-weight:400; margin-left:2px; letter-spacing:0}
+
+.charts{padding:16px 20px; border-bottom:1px solid var(--line-soft); display:grid; gap:16px}
+.chart h4{font-size:12px; letter-spacing:.09em; color:var(--faint); text-transform:uppercase; margin-bottom:8px; display:flex; justify-content:space-between}
+.chart h4 span{text-transform:none; letter-spacing:0; color:var(--muted); font-weight:400}
+.hbars{display:flex; align-items:flex-end; gap:3px; height:44px}
+.hbars .b{flex:1; background:linear-gradient(180deg,var(--accent),var(--accent-weak)); border-radius:2px 2px 0 0; min-height:2px; opacity:.85}
+.hours{display:flex; justify-content:space-between; font-size:12px; color:var(--faint); margin-top:5px; font-variant-numeric:tabular-nums}
+.spark{width:100%; height:52px; display:block; overflow:visible}
+
+.dims{padding:16px 20px; border-bottom:1px solid var(--line-soft); display:grid; gap:11px}
+.dim{display:grid; grid-template-columns:88px 1fr 34px; gap:11px; align-items:center; font-size:13px}
+.dim .name{color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.track{height:6px; background:var(--line-soft); border-radius:100px; overflow:hidden}
+.fill{display:block; height:100%; border-radius:100px; background:linear-gradient(90deg,var(--accent),var(--bar-b,var(--gold))); transition:width .9s var(--ease)}
+.dim .val{text-align:right; color:var(--muted); font-variant-numeric:tabular-nums; font-size:12px}
+.dim .w{font-size:12px; color:var(--faint)}
+
+.report{padding:18px 20px 22px; display:grid; gap:18px}
+.sec h4{font-size:12px; letter-spacing:.1em; color:var(--faint); text-transform:uppercase; margin-bottom:9px}
+.evidence{display:grid; gap:9px}
+.ev{background:var(--surface-2); border:1px solid var(--line-soft); border-left:2px solid var(--line); border-radius:10px; padding:11px 13px}
+.ev.pos{border-left-color:var(--ok)}
+.ev.caution{border-left-color:var(--danger)}
+.ev .q{font-size:13px; color:var(--text-2); line-height:1.6}
+.ev .q::before{content:"“"} .ev .q::after{content:"”"}
+.ev .why{font-size:12px; color:var(--muted); margin-top:5px; line-height:1.55}
+.next{background:var(--accent-soft); border:1px solid var(--accent-line); border-radius:12px; padding:13px 15px}
+.next p{font-size:14px; color:var(--next-text); line-height:1.65}
+.caution-list{display:grid; gap:7px; margin:0; padding:0; list-style:none}
+.caution-list li{font-size:13px; color:var(--muted); padding-left:16px; position:relative; line-height:1.6}
+.caution-list li::before{content:""; position:absolute; left:3px; top:.62em; width:5px; height:5px; border-radius:50%; background:var(--warn)}
+.report-actions{display:flex; gap:8px; flex-wrap:wrap; padding-top:2px}
+.foot-note{font-size:12px; color:var(--faint); line-height:1.6; padding:0 20px 18px}
+
+/* ---------- dialog ---------- */
+dialog{
+  border:1px solid var(--line); border-radius:var(--r-lg); background:var(--surface);
+  color:var(--text); padding:0; width:min(560px, calc(100vw - 32px)); box-shadow:0 40px 100px -30px #000;
+}
+dialog::backdrop{background:rgba(8,6,6,.72); backdrop-filter:blur(3px)}
+.dlg-head{display:flex; align-items:center; padding:18px 20px 0}
+.dlg-head h3{font-size:15px}
+.dlg-body{padding:14px 20px 20px; max-height:min(72vh, 620px); overflow:auto}
+.dlg-foot{display:flex; gap:9px; justify-content:flex-end; padding:0 20px 20px}
+.note{font-size:12px; color:var(--faint); line-height:1.6; background:var(--surface-2); border:1px solid var(--line-soft);
+  border-radius:9px; padding:10px 12px; margin-top:12px}
+.note b{color:var(--warn); font-weight:500}
+.sess-list{display:grid; gap:7px}
+.sess{display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--line-soft);
+  border-radius:10px; background:var(--surface-2); cursor:pointer; transition:border-color .16s var(--ease), background .16s var(--ease)}
+.sess:hover{border-color:var(--line-hi); background:var(--surface-2)}
+.sess .t{flex:1; min-width:0}
+.sess .t b{display:block; font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.sess .t span{font-size:12px; color:var(--muted)}
+.sess .del{border:0; background:transparent; color:var(--muted); cursor:pointer; padding:4px 6px; border-radius:6px; min-width:24px; min-height:24px}
+.sess .del:hover{color:var(--danger); background:rgba(224,106,90,.1)}
+
+/* ---------- toast / busy ---------- */
+.toast{
+  position:fixed; left:50%; bottom:26px; transform:translate(-50%,20px); opacity:0; pointer-events:none;
+  background:#241d1a; border:1px solid #4a3d36; color:#f6efe9; padding:10px 16px; border-radius:10px;
+  font-size:13px; z-index:80; box-shadow:0 18px 40px -18px #000; transition:opacity .22s var(--ease), transform .22s var(--ease);
+  max-width:min(520px, calc(100vw - 32px)); text-align:center;
+}
+.toast.show{opacity:1; transform:translate(-50%,0)}
+.busy{display:inline-flex; gap:3px; align-items:center}
+.busy i{width:5px; height:5px; border-radius:50%; background:currentColor; animation:blink 1.1s infinite}
+.busy i:nth-child(2){animation-delay:.16s} .busy i:nth-child(3){animation-delay:.32s}
+@keyframes blink{0%,100%{opacity:.25} 50%{opacity:1}}
+.skel{padding:22px 20px; display:grid; gap:12px}
+.skel .bar{height:12px; border-radius:6px; background:linear-gradient(90deg,var(--skel-1),var(--skel-2),var(--skel-1)); background-size:200% 100%; animation:shimmer 1.4s infinite}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+.hidden{display:none !important}
+
+@media (max-width:980px){
+  .app{padding:0 16px 40px}
+  .layout{grid-template-columns:1fr; gap:16px}
+  .result-panel{min-height:0}
+  .panel-body{padding:12px 16px 16px}
+  .panel-head{padding:14px 16px 0; flex-wrap:wrap}
+  .panel-head .hint{margin-left:0; flex:0 0 100%; white-space:normal; margin-top:2px}
+  .score-head, .charts, .dims, .report{padding-left:16px; padding-right:16px}
+  .foot-note{padding-left:16px; padding-right:16px}
+  .brand p{display:none}
+  .topbar{padding:14px 0 12px}
+  .tiles{grid-template-columns:repeat(2,1fr)}
+  .dim{grid-template-columns:84px 1fr 32px}
+  textarea#chat{min-height:180px}
+}
+/* ---------- 主题选择 ---------- */
+:root{--glass-bg:rgba(255,255,255,.075); --glass-line:rgba(255,255,255,.18); --glass-hi:rgba(255,255,255,.30); --mark-b:#d9a55f}
+html[data-theme="ink"]{--mark-b:#8fb2ff}
+html[data-theme="moss"]{--mark-b:#a9e6c6}
+html[data-theme="paper"]{--mark-b:#d0763f}
+html[data-theme="mist"]{--mark-b:#7fa8e8}
+html[data-theme="paper"], html[data-theme="mist"]{
+  --glass-bg:rgba(255,255,255,.62); --glass-line:rgba(120,95,75,.18); --glass-hi:rgba(255,255,255,.95);
+}
+.theme-fab{
+  position:fixed; right:22px; bottom:calc(22px + env(safe-area-inset-bottom)); z-index:70;
+  width:58px; height:58px; border-radius:50%; display:grid; place-items:center; cursor:pointer;
+  border:1px solid var(--glass-line); color:var(--text);
+  background:var(--glass-bg);
+  -webkit-backdrop-filter:blur(16px) saturate(170%); backdrop-filter:blur(16px) saturate(170%);
+  box-shadow:0 14px 34px -14px rgba(0,0,0,.55), inset 0 1px 0 var(--glass-hi);
+  transition:transform .2s var(--ease), background .2s var(--ease), box-shadow .2s var(--ease);
+}
+.theme-fab:hover{transform:translateY(-2px) scale(1.04); box-shadow:0 18px 38px -14px rgba(0,0,0,.6), inset 0 1px 0 var(--glass-hi)}
+.theme-fab:active{transform:scale(.93)}
+.theme-fab svg{width:23px; height:23px; opacity:.9}
+.theme-fab.spin svg{animation:fabspin .5s var(--ease)}
+@keyframes fabspin{from{transform:rotate(-120deg) scale(.8); opacity:.3} to{transform:rotate(0) scale(1); opacity:.9}}
+.fab-dot{position:absolute; right:9px; bottom:9px; width:11px; height:11px; border-radius:50%;
+  box-shadow:0 0 0 2.5px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.5)}
+html[data-theme="paper"] .fab-dot, html[data-theme="mist"] .fab-dot{box-shadow:0 0 0 2.5px #fff, inset 0 1px 0 rgba(255,255,255,.5)}
+.fab-tip{position:absolute; right:calc(100% + 10px); top:50%; transform:translateY(-50%) translateX(6px);
+  white-space:nowrap; font-size:12px; color:var(--text-2); background:var(--glass-bg); border:1px solid var(--glass-line);
+  -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px); padding:5px 9px; border-radius:8px; opacity:0; pointer-events:none;
+  transition:opacity .18s var(--ease), transform .18s var(--ease)}
+.theme-fab:hover .fab-tip{opacity:1; transform:translateY(-50%) translateX(0)}
+@media(max-width:560px){ .btn-label{display:none} .btn.icon-only{width:38px; padding:0}
+  .theme-fab{width:48px; height:48px; right:14px; bottom:calc(14px + env(safe-area-inset-bottom))} .theme-fab svg{width:20px; height:20px}
+  .toast{bottom:calc(86px + env(safe-area-inset-bottom))} }
+
+/* ---------- 图表 ---------- */
+.dims-grid{display:grid; grid-template-columns:168px minmax(0,1fr); gap:20px; align-items:center}
+.report .sec > p{max-width:36em}
+.dims-list{display:grid; gap:11px}
+.radar{width:100%; max-width:168px; height:auto; display:block; margin:0 auto}
+.radar .grid-line{fill:none; stroke:var(--line); stroke-width:1}
+.radar .axis{stroke:var(--line); stroke-width:1}
+.radar .area{fill:var(--accent-soft); stroke:var(--accent); stroke-width:1.6; stroke-linejoin:round}
+.radar .pt{fill:var(--accent)}
+.radar text{font-size:9px; fill:var(--muted)}
+.radar-box{display:flex; flex-direction:column; align-items:center; gap:4px}
+.radar-cap{font-size:12px; color:var(--faint); letter-spacing:.08em}
+.trend{width:100%; height:74px; display:block}
+.trend .area{fill:var(--accent-soft)}
+.trend .line{fill:none; stroke:var(--accent); stroke-width:1.8; stroke-linejoin:round; stroke-linecap:round; vector-effect:non-scaling-stroke}
+.trend .base{stroke:var(--line-soft); stroke-width:1}
+.trend-x{display:flex; justify-content:space-between; gap:8px; font-size:12px; color:var(--faint); margin-top:5px}
+.reply-hist{display:flex; align-items:flex-end; gap:8px; height:64px; margin-top:2px}
+.reply-hist .col{flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:stretch; gap:5px; height:100%}
+.reply-hist .bar{border-radius:3px 3px 0 0; background:linear-gradient(180deg,var(--accent),var(--accent-weak)); min-height:2px}
+.reply-hist .lab{font-size:12px; color:var(--faint); text-align:center; white-space:nowrap}
+@media(max-width:760px){ .dims-grid{grid-template-columns:1fr; gap:14px} .radar{max-width:152px} }
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms !important; transition-duration:.01ms !important}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <circle class="ring-outer" cx="24" cy="24" r="21" stroke-width="1.4"/>
+        <circle class="ov-a" cx="18.7" cy="24" r="10.3" stroke-width="2.2"/>
+        <circle class="ov-b" cx="29.3" cy="24" r="10.3" stroke-width="2.2"/>
+      </svg>
+      <div>
+        <h1>心动镜 <span style="color:var(--faint);font-weight:400;font-size:13px">网页版</span></h1>
+        <p>CrushLens · Local first</p>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <nav class="nav">
+      <button class="btn ghost sm" id="btnArchive" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+        <span class="btn-label">本机档案</span>
+      </button>
+      <button class="btn sm" id="btnSettings" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/></svg>
+        设置
+      </button>
+    </nav>
+  </header>
+
+  <main class="layout">
+    <!-- ============ 输入 ============ -->
+    <section class="panel" aria-label="聊天输入">
+      <div class="panel-head">
+        <h2>输入一段聊天</h2>
+        <span class="hint">统计全在本机算，只有报告会发给你配置的接口</span>
+      </div>
+      <div class="panel-body">
+        <div class="mode-row">
+          <div class="seg" role="group" aria-label="分析模式" id="modeSeg">
+            <button type="button" data-mode="crush" aria-pressed="true"><span class="dot" style="display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--faint);margin-right:6px;vertical-align:middle"></span>Crush 心动</button>
+            <button type="button" data-mode="couple" aria-pressed="false"><span class="dot" style="display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--faint);margin-right:6px;vertical-align:middle"></span>情侣关系</button>
+            <button type="button" data-mode="client" aria-pressed="false"><span class="dot" style="display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--faint);margin-right:6px;vertical-align:middle"></span>客户沟通</button>
+          </div>
+          <div class="mode-desc" id="modeDesc"><b>Crush 模式</b>看主动、回应、关心、开放、亲密与行动。</div>
+        </div>
+
+        <textarea id="chat" spellcheck="false" placeholder="把聊天粘贴到这里。支持微信 / QQ / WhatsApp / JSON：&#10;&#10;林晚 2026年9月20日 21:14&#10;在吗&#10;我 2026年9月20日 21:15&#10;在的，刚到家"></textarea>
+
+        <label class="drop" id="dropZone">
+          <input type="file" id="fileInput" accept=".txt,.json,text/plain,application/json">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+          <span id="fileHint">导入 .txt / .json，或直接拖进来</span>
+        </label>
+
+        <div class="row" style="margin-top:14px">
+          <div class="field"><label for="speakerA" id="labelA">我是</label><select id="speakerA"></select></div>
+          <div class="field"><label for="speakerB" id="labelB">对方是</label><select id="speakerB"></select></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <div class="field"><label for="stage" id="labelStage">关系阶段</label><select id="stage"></select></div>
+          <div class="field"><label for="sampleSize">分析条数</label>
+            <select id="sampleSize">
+              <option value="80">最近 80 条</option>
+              <option value="120" selected>最近 120 条</option>
+              <option value="200">最近 200 条</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="thumbs" id="thumbs"></div>
+
+        <div class="analyze-bar">
+          <button class="btn primary" id="btnAnalyze" type="button" style="min-width:150px;min-height:44px;border-radius:11px" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m13 3-9 12h7l-1 6 9-12h-7l1-6Z"/></svg>
+            <span id="analyzeLabel">开始分析</span>
+          </button>
+          <div class="meta" id="parseMeta">还没读到聊天</div>
+        </div>
+        <div class="thumbs" id="mediaSlot" style="margin-top:0;display:none"></div>
+        <button class="btn ghost sm" id="btnAddMedia" type="button" style="margin-top:10px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          附加聊天截图 / 表情包（可选，最多 6 张）
+        </button>
+      </div>
+    </section>
+
+    <!-- ============ 结果 ============ -->
+    <section class="panel result-panel" aria-label="分析结果" id="resultPanel">
+      <div id="emptyState" class="empty">
+        <svg class="rings" viewBox="0 0 96 96" fill="none" aria-hidden="true">
+          <circle cx="48" cy="48" r="44" stroke="currentColor" stroke-opacity=".18" stroke-width="1"/>
+          <circle cx="48" cy="48" r="31" stroke="currentColor" stroke-opacity=".35" stroke-width="1.2"/>
+          <circle cx="48" cy="48" r="18" stroke="currentColor" stroke-opacity=".6" stroke-width="1.2"/>
+          <circle cx="48" cy="48" r="4" fill="currentColor"/>
+        </svg>
+        <h3 id="emptyTitle">先看清事实，再谈感受</h3>
+        <p id="emptySub">粘贴聊天后，消息量、互动天平、回复节奏这些会立刻算出来——不需要 Key。想要 AI 报告，再在「设置」里填自己的 API。</p>
+        <div class="steps">
+          <span class="step"><i>1</i>粘贴或导入聊天</span>
+          <span class="step" id="stepWho"><i>2</i>确认你和他</span>
+          <span class="step"><i>3</i>看统计，或生成报告</span>
+        </div>
+        <div class="demo-row">
+          <button class="btn sm" id="btnDemo" type="button">用示例试试 →</button>
+          <button class="btn sm" id="btnDemoClient" type="button">看「客户沟通」示例 →</button>
+        </div>
+      </div>
+
+      <div id="loading" class="hidden">
+        <div class="score-head">
+          <div class="ring-wrap"><div class="ring-num"><b>·</b><span>分析中</span></div></div>
+          <div class="score-meta">
+            <div class="tag">本地统计已完成</div>
+            <h2 id="loadingTitle">正在等模型返回…</h2>
+            <p id="loadingSub">模型会读最近若干条消息，返回结构化报告。通常 10–30 秒。</p>
+          </div>
+        </div>
+        <div class="skel">
+          <div class="bar" style="width:92%"></div>
+          <div class="bar" style="width:78%"></div>
+          <div class="bar" style="width:64%"></div>
+          <div class="bar" style="width:85%"></div>
+        </div>
+      </div>
+
+      <div id="result" class="hidden"></div>
+    </section>
+  </main>
+</div>
+
+<!-- ============ 设置 ============ -->
+<dialog id="settingsDlg" aria-labelledby="settingsTitle">
+  <form method="dialog">
+    <div class="dlg-head"><h3 id="settingsTitle">接口设置</h3></div>
+    <div class="dlg-body">
+      <div class="field" style="margin-top:0">
+        <label for="preset">服务商预设</label>
+        <select id="preset"></select>
+      </div>
+      <div class="field">
+        <label for="baseUrl">Base URL（含 API 版本路径，程序自动追加 /chat/completions）</label>
+        <input class="input" id="baseUrl" spellcheck="false" placeholder="https://api.deepseek.com/v1">
+      </div>
+      <div class="field">
+        <label for="modelId">模型 ID</label>
+        <input class="input" id="modelId" spellcheck="false" placeholder="deepseek-chat">
+      </div>
+      <div class="field">
+        <label for="apiKey">API Key</label>
+        <input class="input" id="apiKey" type="password" spellcheck="false" autocomplete="off" placeholder="sk-...">
+      </div>
+      <div class="field">
+        <label for="proxyUrl">代理地址（可选，解决浏览器跨域）</label>
+        <input class="input" id="proxyUrl" spellcheck="false" placeholder="https://your-worker.workers.dev/v1">
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px;color:var(--muted)">
+        <input type="checkbox" id="rememberKey" style="accent-color:var(--accent);width:15px;height:15px">
+        记住 Key（存本机 localStorage，仅本浏览器可用）
+      </label>
+      <div class="note">
+        网页版没有后端：Key 只存在这台设备的浏览器里，<b>不会</b>发到任何 CrushLens 服务器。但浏览器存储是明文的，公用电脑上建议不勾选，关掉标签页即丢弃。
+        浏览器直连模型接口受跨域限制，若提示 <code>Failed to fetch</code>，请填一个自己的反代地址。
+      </div>
+      <div style="display:flex;gap:9px;margin-top:14px;flex-wrap:wrap">
+        <button class="btn sm" id="btnTest" type="button">检测连接</button>
+        <span id="testResult" style="font-size:12px;color:var(--muted);display:flex;align-items:center"></span>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn" value="cancel" type="submit">取消</button>
+      <button class="btn primary" id="btnSaveSettings" value="save" type="submit">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ============ 档案 ============ -->
+<dialog id="archiveDlg" aria-labelledby="archiveTitle">
+  <div class="dlg-head"><h3 id="archiveTitle">本机档案</h3></div>
+  <div class="dlg-body">
+    <div class="note" style="margin:0 0 12px">档案存在这个浏览器的 localStorage 里，最多保留 30 份；清浏览器数据会一起消失。</div>
+    <div class="sess-list" id="sessList"></div>
+  </div>
+  <div class="dlg-foot"><button class="btn" type="button" id="btnCloseArchive">关闭</button></div>
+</dialog>
+
+  <button class="theme-fab" id="themeFab" type="button" aria-label="切换主题">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor" stroke="none" opacity=".85"/>
+    </svg>
+    <i class="fab-dot" id="fabDot" aria-hidden="true"></i>
+    <span class="fab-tip" id="fabTip">切换主题</span>
+  </button>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   心动镜 · 网页版（单文件）
+   本地统计 + 用户自配 OpenAI 兼容接口
+   ============================================================ */
+
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const clamp = (n, a = 0, b = 100) => Math.max(a, Math.min(b, Number(n) || 0));
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const MODES = {
+  crush: {
+    label: "Crush 心动",
+    desc: "<b>Crush 模式</b>看主动、回应、关心、开放、亲密与行动。",
+    dims: [
+      ["initiative", "主动延续", 17], ["responsiveness", "回应投入", 22], ["care", "关心体贴", 18],
+      ["openness", "自我开放", 14], ["intimacy", "亲密表达", 15], ["action", "实际行动", 14]
+    ],
+    stages: ["刚认识 / 还在了解", "暧昧 / 试探期", "追求中", "断联后复联", "不确定"],
+    brief: "判断聊天中呈现出的互动好感信号（不是对方喜欢你的概率）"
+  },
+  couple: {
+    label: "情侣关系",
+    desc: "<b>情侣模式</b>看安全感、双向投入、沟通修复、边界尊重、亲密连接与共同未来。",
+    dims: [
+      ["security", "安全感", 20], ["reciprocity", "双向投入", 20], ["repair", "沟通修复", 18],
+      ["boundary", "边界尊重", 15], ["intimacy", "亲密连接", 15], ["future", "共同未来", 12]
+    ],
+    stages: ["稳定恋爱", "磨合期", "异地恋", "同居", "冷战 / 修复期", "长期关系"],
+    brief: "整理沟通与连接信号（不是心理诊断，也不是去留建议）"
+  },
+  client: {
+    label: "客户沟通",
+    desc: "<b>客户模式</b>看需求洞察、响应节奏、专业可信、关系信任、推进力度与成交信号。",
+    dims: [
+      ["needs", "需求洞察", 20], ["pace", "响应节奏", 15], ["pro", "专业可信", 20],
+      ["trust", "关系信任", 15], ["push", "推进力度", 18], ["deal", "成交信号", 12]
+    ],
+    stages: ["初次接触 / 询价", "需求沟通中", "报价 / 方案评审", "合同 / 付款谈判", "已成交 / 交付中", "复购 / 长期合作"],
+    brief: "评估这次客户沟通的推进质量、信息完整度与成交信号（不是客户一定会下单的概率）",
+    scoreLabel: "推进分",
+    tian: "发言占比",
+    evidenceTitle: "关键证据",
+    nextTitle: "下一句可以这样回",
+    cautionTitle: "这次沟通的风险",
+    stageLabel: "客户阶段",
+    labelA: "我是（销售 / 客服）",
+    labelB: "客户",
+    stepWho: "确认你和客户",
+    docTitle: "心动镜 · 客户沟通复盘",
+    emptyTitle: "先看清对话，再谈推进",
+    emptySub: "粘贴聊天后，消息量、双方发言占比、回复节奏会立刻算出来——不需要 Key。想要 AI 复盘，再在「设置」里填自己的 API。",
+    placeholder: "把和客户的聊天粘贴到这里。支持微信 / 企业微信 / QQ / WhatsApp / JSON：\n\n我 2026年9月21日 10:06\n标准配置 500 并发，扩容到 2000 也没问题\n客户-王总 2026年9月21日 10:09\n价格呢，我们预算大概 30 万",
+    signals: ["报价", "价格", "预算", "合同", "发票", "样品", "发货", "交期", "折扣", "方案", "下单", "采购", "对接", "需求", "试用", "优惠", "付款", "验收", "售后", "决策", "并发", "对接"],
+    footer: "由心动镜网页版生成。分数衡量的是这段对话里呈现出的推进与成交信号，不代表成交结果，也不替代商务判断。",
+    promptRole: "你是 CrushLens 的客户沟通复盘引擎，任务是把销售 / 客服与客户的聊天整理成结构化复盘，而不是替用户下成交判决。",
+    rules: [
+      "把客户明确说出的预算、时间、决策人、竞品、顾虑放进 evidence 或 cautions，不要脑补没出现的信息。",
+      "cautions 写这次沟通的真实风险：没确认决策人、承诺过头、价格让得太快、没约下一步、需求描述模糊等。",
+      "next_message 是一句可以立刻发给客户的话：确认需求、给出具体下一步或时间点，不超过 40 字，不要空泛寒暄。"
+    ]
+  }
+};
+
+const PRESETS = [
+  { name: "DeepSeek", base: "https://api.deepseek.com/v1", model: "deepseek-chat" },
+  { name: "通义千问 · 百炼", base: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen-plus" },
+  { name: "Kimi · Moonshot", base: "https://api.moonshot.cn/v1", model: "moonshot-v1-8k" },
+  { name: "智谱 GLM", base: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4-flash" },
+  { name: "硅基流动", base: "https://api.siliconflow.cn/v1", model: "deepseek-ai/DeepSeek-V3" },
+  { name: "OpenAI", base: "https://api.openai.com/v1", model: "gpt-4o-mini" },
+  { name: "OpenRouter", base: "https://openrouter.ai/api/v1", model: "openai/gpt-4o-mini" },
+  { name: "本机 Ollama", base: "http://127.0.0.1:11434/v1", model: "qwen2.5:7b" },
+  { name: "自定义", base: "", model: "" }
+];
+
+const THEMES = [
+  { id: "warm", name: "暖夜", dot: "#e4556b" },
+  { id: "ink", name: "墨蓝", dot: "#5b8def" },
+  { id: "moss", name: "松林", dot: "#4fbf8f" },
+  { id: "paper", name: "纸白", dot: "#c8445c" },
+  { id: "mist", name: "晨雾", dot: "#3d6fd0" }
+];
+const LS_THEME = "crushlens.theme.v1";
+
+const LS_SETTINGS = "crushlens.settings.v1";
+const LS_SESSIONS = "crushlens.sessions.v1";
+const SS_KEY = "crushlens.key";
+
+const state = {
+  mode: "crush",
+  messages: [],
+  speakers: [],
+  media: [],
+  stats: null,
+  report: null,
+  busy: false
+};
+
+/* ---------------- 主题 ---------------- */
+function currentTheme() {
+  const t = document.documentElement.getAttribute("data-theme");
+  return THEMES.some(x => x.id === t) ? t : "paper";
+}
+function applyTheme(id, persist) {
+  const t = THEMES.some(x => x.id === id) ? id : "warm";
+  document.documentElement.setAttribute("data-theme", t);
+  const light = t === "paper" || t === "mist";
+  const meta = document.querySelector('meta[name="color-scheme"]');
+  if (meta) meta.setAttribute("content", light ? "light" : "dark");
+  if (persist) { try { localStorage.setItem(LS_THEME, t); } catch (e) {} }
+  const meta2 = THEMES.find(x => x.id === t) || THEMES[0];
+  const fab = $("#themeFab"), dot = $("#fabDot"), tip = $("#fabTip");
+  if (fab) { fab.setAttribute("aria-label", "切换主题，当前：" + meta2.name); fab.setAttribute("title", "当前主题：" + meta2.name + "（点一下换下一个）"); }
+  if (dot) dot.style.background = meta2.dot;
+  if (tip) tip.textContent = meta2.name;
+}
+function cycleTheme() {
+  const i = THEMES.findIndex(x => x.id === currentTheme());
+  const next = THEMES[(i + 1) % THEMES.length];
+  applyTheme(next.id, true);
+  const fab = $("#themeFab");
+  if (fab) { fab.classList.remove("spin"); void fab.offsetWidth; fab.classList.add("spin"); }
+  toast("主题 · " + next.name);
+}
+
+/* ---------------- 设置存储 ---------------- */
+function loadSettings() {
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}"); } catch (e) { s = {}; }
+  s.remember = !!s.remember;
+  if (!s.remember) s.key = sessionStorage.getItem(SS_KEY) || "";
+  return { preset: 0, base: "", model: "", key: "", proxy: "", remember: false, ...s };
+}
+function saveSettings(s) {
+  const { key, ...rest } = s;
+  localStorage.setItem(LS_SETTINGS, JSON.stringify(s.remember ? { ...rest, key } : rest));
+  sessionStorage.setItem(SS_KEY, key || "");
+}
+
+/* ---------------- 时间解析 ---------------- */
+function parseDate(raw) {
+  if (!raw) return null;
+  let s = String(raw).trim();
+  let m;
+  if ((m = /^(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(s)))
+    return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+  if ((m = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4}|\d{2}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i.exec(s))) {
+    let mo = +m[1], d = +m[2];
+    if (mo > 12) { const t = mo; mo = d; d = t; }
+    let h = +m[4];
+    const ap = (m[7] || "").toUpperCase();
+    if (ap === "PM" && h < 12) h += 12;
+    if (ap === "AM" && h === 12) h = 0;
+    let y = +m[3]; if (y < 100) y += 2000;
+    return new Date(y, mo - 1, d, h, +m[5], +(m[6] || 0));
+  }
+  if ((m = /^(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(s))) {
+    const now = new Date();
+    return new Date(now.getFullYear(), +m[1] - 1, +m[2], +m[3], +m[4], +(m[5] || 0));
+  }
+  const d = new Date(s.replace("年", "-").replace("月", "-").replace("日", " "));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/* ---------------- 聊天解析 ---------------- */
+const RE = {
+  waBracket: /^\[(\d{1,2}\/\d{1,2}\/\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)\]\s*([^:：]{1,24})[:：]\s*(.*)$/i,
+  waDash: /^(\d{1,2}\/\d{1,2}\/\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?)\s*[-–]\s*([^:：]{1,24})[:：]\s*(.*)$/,
+  bracket: /^\[(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?)\]\s*([^:：]{1,24})[:：]\s*(.*)$/,
+  withTime: /^(.{1,24}?)[:：]\s*(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?\s+\d{1,2}:\d{2}(?::\d{2})?|\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?)\s*$/,
+  named: /^(.{1,24}?)[:：]\s*(.+)$/,
+  timeOnly: /^(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?\s+\d{1,2}:\d{2}(?::\d{2})?|\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?|\d{1,2}\/\d{1,2}\/\d{2,4},?\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)$/i,
+  senderOnly: /^[^\s:：]{1,20}$/,
+  dateFirst: /^(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?)\s+([^\s:：]{1,20})$/
+};
+
+function parseChat(raw) {
+  const text = String(raw || "").replace(/\r\n?/g, "\n");
+  if (!text.trim()) return [];
+  const t = text.trim();
+  if (t[0] === "[" || t[0] === "{") {
+    try {
+      const json = JSON.parse(t);
+      const arr = Array.isArray(json) ? json
+        : (json.messages || json.chat || json.data || json.list || null);
+      if (Array.isArray(arr)) {
+        const out = [];
+        for (const item of arr) {
+          if (Array.isArray(item)) {
+            out.push({ sender: String(item[0] || ""), text: String(item[1] || ""), time: parseDate(item[2]) });
+          } else if (item && typeof item === "object") {
+            const sender = item.sender || item.senderName || item.from || item.name || item.author || item.nickname || item.speaker || "";
+            const body = item.content || item.text || item.message || item.body || item.msg || "";
+            const tm = item.timestamp || item.time || item.date || item.createdAt || item.createTime || item.sendTime || item.ts;
+            if (sender || body) out.push({ sender: String(sender), text: String(body), time: parseDate(tm) });
+          }
+        }
+        return out.filter(m => m.sender && m.text).map(m => ({ ...m }));
+      }
+    } catch (e) { /* 不是 JSON，按纯文本继续 */ }
+  }
+
+  const lines = text.split("\n");
+  const out = [];
+  let cur = null;
+  const flush = () => { if (cur && cur.text.trim()) out.push(cur); cur = null; };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    let m;
+
+    if ((m = RE.waBracket.exec(line))) {
+      flush(); cur = { sender: m[3].trim(), time: parseDate(m[1] + " " + m[2]), text: m[4] }; continue;
+    }
+    if ((m = RE.waDash.exec(line))) {
+      flush(); cur = { sender: m[3].trim(), time: parseDate(m[1] + " " + m[2]), text: m[4] }; continue;
+    }
+    if ((m = RE.bracket.exec(line))) {
+      flush(); cur = { sender: m[2].trim(), time: parseDate(m[1]), text: m[3] }; continue;
+    }
+    if ((m = RE.dateFirst.exec(line))) {
+      flush(); cur = { sender: m[2].trim(), time: parseDate(m[1]), text: "" }; continue;
+    }
+    if ((m = RE.withTime.exec(line))) {
+      flush(); cur = { sender: m[1].trim(), time: parseDate(m[2]), text: "" }; continue;
+    }
+    // 微信电脑版三行：发送人 / 时间 / 正文
+    if (RE.senderOnly.test(line) && i + 1 < lines.length && RE.timeOnly.test(lines[i + 1].trim())) {
+      flush(); cur = { sender: line, time: parseDate(lines[i + 1].trim()), text: "" }; i++; continue;
+    }
+    if (RE.timeOnly.test(line) && cur && !cur.text.trim()) { cur.time = parseDate(line); continue; }
+    if ((m = RE.named.exec(line)) && !RE.timeOnly.test(line)) {
+      const body = m[2].trim();
+      if (body.length > 0 && !/^\d{1,2}:\d{2}(:\d{2})?$/.test(body)) {
+        flush(); cur = { sender: m[1].trim(), time: null, text: body }; continue;
+      }
+    }
+    if (cur) cur.text += (cur.text ? "\n" : "") + line;
+  }
+  flush();
+  return out;
+}
+
+/* ---------------- 本地统计 ---------------- */
+function median(arr) {
+  if (!arr.length) return 0;
+  const a = arr.slice().sort((x, y) => x - y);
+  const mid = Math.floor(a.length / 2);
+  return a.length % 2 ? a[mid] : Math.round((a[mid - 1] + a[mid]) / 2);
+}
+function fmtDur(ms) {
+  if (!ms) return "—";
+  const min = Math.round(ms / 60000);
+  if (min < 1) return "<1 分钟";
+  if (min < 60) return min + " 分钟";
+  const h = Math.floor(min / 60), r = min % 60;
+  return r ? h + " 小时 " + r + " 分" : h + " 小时";
+}
+const SIGNALS = ["想你", "想见你", "晚安", "早安", "在吗", "哈哈", "抱抱", "喜欢", "爱你", "到家", "注意安全", "一起", "见面", "有空", "忙", "累", "睡", "吃饭", "宝贝", "陪你"];
+
+function computeStats(messages, a, b) {
+  const from = (messages || []).map(m => ({ ...m, time: m.time instanceof Date && !isNaN(m.time) ? m.time : null }))
+    .filter(m => (m.sender === a || m.sender === b) && String(m.text || "").trim());
+  const n = from.length;
+  const count = { [a]: 0, [b]: 0 };
+  let chars = { [a]: 0, [b]: 0 }, questions = 0, late = 0;
+  const hours = new Array(24).fill(0), byDay = {};
+  from.forEach(m => {
+    const len = String(m.text).replace(/\s/g, "").length;
+    count[m.sender] = (count[m.sender] || 0) + 1;
+    chars[m.sender] = (chars[m.sender] || 0) + len;
+    if (/[?？]/.test(m.text)) questions++;
+    if (m.time) {
+      hours[m.time.getHours()]++;
+      const k = m.time.getFullYear() + "-" + String(m.time.getMonth() + 1).padStart(2, "0") + "-" + String(m.time.getDate()).padStart(2, "0");
+      byDay[k] = (byDay[k] || 0) + 1;
+      const h = m.time.getHours();
+      if (h >= 23 || h < 5) late++;
+    }
+  });
+  // 按时间排序（无时间的保持原顺序，放到后面）
+  const timed = from.filter(m => m.time).sort((x, y) => x.time - y.time);
+  const gaps = [];
+  const openers = { [a]: 0, [b]: 0 };
+  let extra = 0, streakRun = 0, curRun = 0;
+  for (let i = 0; i < timed.length; i++) {
+    const m = timed[i], prev = timed[i - 1];
+    if (!prev) { openers[m.sender]++; continue; }
+    const gap = m.time - prev.time;
+    if (gap > 3 * 3600 * 1000) { openers[m.sender]++; }
+    if (m.sender === prev.sender) { curRun++; extra++; if (curRun > streakRun) streakRun = curRun; }
+    else { curRun = 0; if (gap >= 0 && gap <= 6 * 3600 * 1000) gaps.push(gap); }
+  }
+  const days = Object.keys(byDay).sort();
+  // 连续聊天天数（最长）
+  let best = 0, run = 0, prevDay = null;
+  days.forEach(d => {
+    const dt = new Date(d + "T00:00:00");
+    if (prevDay && (dt - prevDay) === 86400000) run++; else run = 1;
+    prevDay = dt; if (run > best) best = run;
+  });
+  const words = (MODES[state.mode] && MODES[state.mode].signals) || SIGNALS;
+  const signal = words.map(w => {
+    let c = 0;
+    from.forEach(m => { c += (String(m.text).split(w).length - 1); });
+    return { w, c };
+  }).filter(x => x.c > 0).sort((x, y) => y.c - x.c).slice(0, 6);
+
+  const dayKeys = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    dayKeys.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"));
+  }
+  const rhythm = dayKeys.map(k => byDay[k] || 0);
+  const spanDays = days.length ? Math.round((new Date(days[days.length - 1]) - new Date(days[0])) / 86400000) + 1 : 0;
+
+  return {
+    n, a, b, count, chars, questions, late, hours, days, streak: best, spanDays,
+    openers, medianReply: median(gaps), gaps: gaps.length,
+    avgA: count[a] ? +(chars[a] / count[a]).toFixed(1) : 0,
+    avgB: count[b] ? +(chars[b] / count[b]).toFixed(1) : 0,
+    double: extra, signal, rhythm, dayKeys, byDay, gapsArr: gaps,
+    pctA: n ? Math.round(count[a] / n * 100) : 0,
+    pctB: n ? 100 - Math.round(count[a] / n * 100) : 0
+  };
+}
+
+/* ---------------- 报告渲染 ---------------- */
+function weightedScore(dims, mode) {
+  const defs = MODES[mode].dims;
+  let total = 0, wsum = 0;
+  defs.forEach(([key, , w]) => {
+    const v = clamp(dims ? dims[key] : 0);
+    total += v * w; wsum += w;
+  });
+  return Math.round(total / (wsum || 1));
+}
+
+function ringSVG(score) {
+  const r = 50, c = 2 * Math.PI * r, off = c * (1 - clamp(score) / 100);
+  return '<svg width="112" height="112" viewBox="0 0 112 112" aria-hidden="true">' +
+    '<defs><linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">' +
+    '<stop offset="0" stop-color="#f07a8c"/><stop offset="1" stop-color="#d9a55f"/></linearGradient></defs>' +
+    '<circle class="ring-bg" cx="56" cy="56" r="50"/>' +
+    '<circle class="ring-fg" cx="56" cy="56" r="50" stroke-dasharray="' + c.toFixed(1) + '" stroke-dashoffset="' + off.toFixed(1) + '"/></svg>';
+}
+
+function fmtDay(d) {
+  if (!d) return "";
+  const p = String(d).split("-");
+  return (+p[1]) + "/" + (+p[2]);
+}
+
+/* 六维雷达图：颜色全部走 CSS 变量，主题切换自动跟随 */
+function radarSVG(dims, mode) {
+  const defs = MODES[mode].dims, n = defs.length;
+  const cx = 90, cy = 90, R = 68, LR = 80;
+  const pt = (i, v) => {
+    const a = -Math.PI / 2 + i * 2 * Math.PI / n;
+    const r = R * (clamp(v) / 100);
+    return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+  };
+  const lab = (i) => {
+    const a = -Math.PI / 2 + i * 2 * Math.PI / n;
+    return [cx + Math.cos(a) * LR, cy + Math.sin(a) * LR];
+  };
+  let grid = "";
+  [25, 50, 75, 100].forEach(lv => {
+    grid += '<polygon class="grid-line" points="' + defs.map((_, i) => pt(i, lv).map(v => v.toFixed(1)).join(",")).join(" ") + '"/>';
+  });
+  let axes = "";
+  defs.forEach(([k, name], i) => {
+    const [x, y] = pt(i, 100);
+    axes += '<line class="axis" x1="' + cx + '" y1="' + cy + '" x2="' + x.toFixed(1) + '" y2="' + y.toFixed(1) + '"/>';
+  });
+  const area = defs.map(([k], i) => pt(i, clamp(dims[k])).map(v => v.toFixed(1)).join(",")).join(" ");
+  const dots = defs.map(([k], i) => {
+    const [x, y] = pt(i, clamp(dims[k]));
+    return '<circle class="pt" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="2.4"/>';
+  }).join("");
+  return '<svg class="radar" viewBox="0 0 180 180" role="img" aria-label="六维雷达图">' +
+    grid + axes + '<polygon class="area" points="' + area + '"/>' + dots + "</svg>";
+}
+
+/* 每日消息量趋势（全时段） */
+function trendSVG(s) {
+  const days = s.days || [], n = days.length;
+  if (n < 2) return "";
+  const counts = days.map(d => (s.byDay && s.byDay[d]) || 0);
+  const mx = Math.max(1, ...counts);
+  const x = i => (i / (n - 1)) * 100;
+  const y = v => 54 - (v / mx) * 42;
+  const pts = counts.map((v, i) => x(i).toFixed(2) + "," + y(v).toFixed(2)).join(" ");
+  return '<svg class="trend" viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">' +
+    '<line class="base" x1="0" y1="56" x2="100" y2="56"/>' +
+    '<polygon class="area" points="0,56 ' + pts + ' 100,56"/>' +
+    '<polyline class="line" points="' + pts + '"/></svg>' +
+    '<div class="trend-x"><span>' + esc(fmtDay(days[0])) + '</span><span>共 ' + n + ' 天 · 峰值 ' + mx + ' 条/天</span><span>' + esc(fmtDay(days[n - 1])) + '</span></div>';
+}
+
+/* 回复速度分布 */
+function replyHistSVG(s) {
+  const gaps = s.gapsArr || [];
+  if (!gaps.length) return "";
+  const M = 60 * 1000, H = 60 * M;
+  const buckets = [
+    [0, 5 * M, "<5 分"], [5 * M, 15 * M, "5–15 分"], [15 * M, H, "15–60 分"],
+    [H, 6 * H, "1–6 时"], [6 * H, Infinity, ">6 时"]
+  ];
+  const counts = buckets.map(([lo, hi]) => gaps.filter(g => g >= lo && g < hi).length);
+  const mx = Math.max(1, ...counts);
+  return '<div class="reply-hist">' + buckets.map(([, , lab], i) =>
+    '<div class="col"><span class="lab">' + counts[i] + '</span>' +
+    '<div class="bar" style="height:' + Math.max(4, Math.round(counts[i] / mx * 100)) + '%" title="' + lab + " · " + counts[i] + ' 次"></div>' +
+    '<span class="lab">' + lab + "</span></div>").join("") + "</div>";
+}
+
+function renderResult() {
+  const s = state.stats, r = state.report, mode = state.mode, M = MODES[mode];
+  if (!s) return;
+  const dims = r ? r.dimensions || {} : {};
+  const score = r ? weightedScore(dims, mode) : 0;
+  const maxH = Math.max(1, ...s.hours);
+
+  const tiles = [
+    ["有效消息", s.n, "条"],
+    ["聊天天数", s.days.length, "天 · 跨度 " + s.spanDays + " 天"],
+    ["中位回复", fmtDur(s.medianReply), s.gaps + " 次回应"],
+    ["平均字数", (s.avgA + " / " + s.avgB), "你 / 对方"],
+    ["提问数", s.questions, "次"],
+    ["深夜消息", s.late, "条（23–5 点）"]
+  ];
+
+  let html = "";
+
+  if (r) {
+    html += '<div class="score-head">' +
+      '<div class="ring-wrap">' + ringSVG(score) + '<div class="ring-num"><b>' + score + '</b><span>' + esc(M.scoreLabel || "关系分") + '</span></div></div>' +
+      '<div class="score-meta">' +
+      '<div class="tag">' + esc(MODES[mode].label) + '</div>' +
+      '<h2>' + esc(r.title || "这一次的读取") + '</h2>' +
+      '<p>' + esc(r.summary || "") + '</p>' +
+      (r.score_raw != null ? '<div class="raw">模型原始分 ' + clamp(r.score_raw) + ' 仅作参考；上面的分数由六维加权得出</div>' : "") +
+      '</div></div>';
+  }
+
+  html += '<div class="tiles">' + tiles.map(([k, v, u]) =>
+    '<div class="tile"><div class="k">' + k + '</div><div class="v">' + esc(v) + '<small>' + esc(u) + '</small></div></div>').join("") + '</div>';
+
+  // 互动天平
+  const pa = s.pctA, pb = s.pctB;
+  html += '<div class="charts">' +
+    '<div class="chart"><h4>' + esc(M.tian || "互动天平") + ' <span>' + esc(s.a) + ' ' + pa + '% · ' + esc(s.b) + ' ' + pb + '%</span></h4>' +
+    '<div class="track" style="height:8px"><div class="fill" style="width:' + pa + '%;background:linear-gradient(90deg,var(--accent),var(--gold))"></div></div></div>';
+
+  // 24 小时
+  html += '<div class="chart"><h4>24 小时活跃 <span>共 ' + s.n + ' 条</span></h4><div class="hbars">' +
+    s.hours.map((v, i) => '<div class="b" style="height:' + Math.max(3, Math.round(v / maxH * 100)) + '%;opacity:' + (v ? (0.45 + 0.55 * v / maxH).toFixed(2) : 0.14) + '" title="' + i + ' 点 · ' + v + ' 条"></div>').join("") +
+    '</div><div class="hours"><span>0</span><span>6</span><span>12</span><span>18</span><span>23</span></div></div>';
+
+  // 每日消息量（全时段）
+  if (s.days.length >= 2) {
+    html += '<div class="chart"><h4>每日消息量 <span>最长连续 ' + s.streak + ' 天</span></h4>' + trendSVG(s) + '</div>';
+  }
+  // 回复速度分布
+  if (s.gapsArr && s.gapsArr.length) {
+    html += '<div class="chart"><h4>回复速度分布 <span>共 ' + s.gaps + ' 次回应</span></h4>' + replyHistSVG(s) + '</div>';
+  }
+
+  // 信号词
+  if (s.signal.length) {
+    html += '<div class="chart"><h4>高频信号词</h4><div style="display:flex;gap:6px;flex-wrap:wrap">' +
+      s.signal.map(x => '<span style="font-size:12px;color:var(--text-2);background:var(--surface-2);border:1px solid var(--line);padding:3px 9px;border-radius:100px">' + esc(x.w) + ' <b style="color:var(--gold);font-weight:500">' + x.c + '</b></span>').join("") +
+      '</div></div>';
+  }
+  html += '</div>';
+
+  // 六维
+  if (r) {
+    html += '<div class="dims"><div class="dims-grid"><div class="radar-box">' + radarSVG(dims, mode) + '<span class="radar-cap">六维雷达</span></div>' +
+      '<div class="dims-list">' + MODES[mode].dims.map(([key, name, wt]) => {
+        const v = clamp(dims[key]);
+        return '<div class="dim"><span class="name">' + name + ' <small class="w">' + wt + '%</small></span>' +
+          '<span class="track"><span class="fill" style="width:' + v + '%"></span></span>' +
+          '<span class="val">' + v + '</span></div>';
+      }).join("") + '</div></div></div>';
+
+    // 报告正文
+    const ev = Array.isArray(r.evidence) ? r.evidence.slice(0, 5) : [];
+    html += '<div class="report">';
+    if (r.reading) {
+      html += '<div class="sec"><h4>整体读取</h4><p style="font-size:13px;color:var(--text-2);line-height:1.75">' + esc(r.reading) + '</p></div>';
+    }
+    if (ev.length) {
+      html += '<div class="sec"><h4>' + esc(M.evidenceTitle || "心动证据") + '</h4><div class="evidence">' + ev.map(e => {
+        const kind = e.signal === "caution" ? "caution" : e.signal === "positive" ? "pos" : "";
+        return '<div class="ev ' + kind + '"><div class="q">' + esc(e.quote || "") + '</div>' +
+          (e.why ? '<div class="why">' + esc(e.why) + '</div>' : "") + '</div>';
+      }).join("") + '</div></div>';
+    }
+    if (r.media_notes && r.media_notes.length) {
+      html += '<div class="sec"><h4>图片解读</h4><div class="evidence">' + r.media_notes.map((m, i) =>
+        '<div class="ev"><div class="q">图 ' + (i + 1) + '：' + esc(m.description || "看不清") + '</div>' +
+        (m.signal ? '<div class="why">' + esc(m.signal) + '</div>' : "") + '</div>').join("") + '</div></div>';
+    }
+    if (r.next_message) {
+      html += '<div class="sec"><h4>' + esc(M.nextTitle || "下一句可以这样说") + '</h4><div class="next"><p>' + esc(r.next_message) + '</p></div></div>';
+    }
+    if (r.cautions && r.cautions.length) {
+      html += '<div class="sec"><h4>' + esc(M.cautionTitle || "需要留心") + '</h4><ul class="caution-list">' + r.cautions.map(c => '<li>' + esc(c) + '</li>').join("") + '</ul></div>';
+    }
+    html += '<div class="report-actions">' +
+      '<button class="btn sm" type="button" id="btnExport">导出 HTML 报告</button>' +
+      '<button class="btn sm" type="button" id="btnSave">存到本机档案</button>' +
+      '<button class="btn ghost sm" type="button" id="btnAgain">换一段聊天</button>' +
+      '</div></div>';
+  } else {
+    html += '<div class="foot-note" style="padding-top:18px">以上统计全部在本机计算。' +
+      '<a href="#" id="linkSettings">填入 API Key</a> 后，再点「开始分析」就能拿到六维报告和证据摘录。</div>';
+  }
+
+  const box = $("#result");
+  box.innerHTML = html;
+  box.classList.remove("hidden");
+  $("#emptyState").classList.add("hidden");
+  $("#loading").classList.add("hidden");
+
+  const ex = $("#btnExport"); if (ex) ex.onclick = exportHTML;
+  const sv = $("#btnSave"); if (sv) sv.onclick = saveCurrentSession;
+  const ag = $("#btnAgain"); if (ag) ag.onclick = () => { $("#chat").focus(); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const ls = $("#linkSettings"); if (ls) ls.onclick = (e) => { e.preventDefault(); openSettings(); };
+}
+
+/* ---------------- 本地统计预览（未填 Key 也能看） ---------------- */
+function refreshParse() {
+  const raw = $("#chat").value;
+  const msgs = parseChat(raw);
+  state.messages = msgs;
+  const counts = {};
+  msgs.forEach(m => { counts[m.sender] = (counts[m.sender] || 0) + 1; });
+  const names = Object.keys(counts).sort((x, y) => counts[y] - counts[x]);
+  state.speakers = names;
+
+  const selA = $("#speakerA"), selB = $("#speakerB");
+  const prevA = selA.value, prevB = selB.value;
+  const opts = names.map(n => '<option value="' + esc(n) + '">' + esc(n) + '（' + counts[n] + ' 条）</option>').join("");
+  selA.innerHTML = opts; selB.innerHTML = opts;
+  if (names.includes(prevA)) selA.value = prevA;
+  if (names.includes(prevB) && prevB !== selA.value) selB.value = prevB;
+  else selB.value = names.find(n => n !== selA.value) || "";
+
+  const meta = $("#parseMeta");
+  if (!msgs.length) {
+    meta.textContent = raw.trim() ? "没识别出消息，试试微信「发送人 / 时间 / 正文」格式" : "还没读到聊天";
+    $("#btnAnalyze").disabled = true;
+    return;
+  }
+  const a = selA.value, b = selB.value;
+  meta.innerHTML = "读到 <b>" + msgs.length + "</b> 条消息 · " + names.length + " 位发送人" +
+    (a && b ? " · " + esc(a) + " × " + esc(b) : "");
+  $("#btnAnalyze").disabled = !(a && b);
+}
+
+function showStatsOnly() {
+  const a = $("#speakerA").value, b = $("#speakerB").value;
+  if (!a || !b) return;
+  state.stats = computeStats(state.messages, a, b);
+  state.report = null;
+  renderResult();
+  if (window.innerWidth < 980) $("#resultPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/* ---------------- 提示 ---------------- */
+let toastTimer = 0;
+function toast(msg, ms = 2600) {
+  const el = $("#toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), ms);
+}
+
+/* ---------------- 设置弹窗 ---------------- */
+function fillPresets() {
+  $("#preset").innerHTML = PRESETS.map((p, i) => '<option value="' + i + '">' + esc(p.name) + '</option>').join("");
+}
+function openSettings() {
+  const s = loadSettings();
+  fillPresets();
+  $("#preset").value = String(s.preset || 0);
+  $("#baseUrl").value = s.base || "";
+  $("#modelId").value = s.model || "";
+  $("#apiKey").value = s.key || "";
+  $("#proxyUrl").value = s.proxy || "";
+  $("#rememberKey").checked = !!s.remember;
+  $("#testResult").textContent = "";
+  $("#settingsDlg").showModal();
+}
+$("#btnSettings").onclick = openSettings;
+
+$("#preset").onchange = () => {
+  const p = PRESETS[+$("#preset").value];
+  if (p && p.base) { $("#baseUrl").value = p.base; $("#modelId").value = p.model; }
+};
+$("#btnSaveSettings").onclick = () => {
+  const preset = +$("#preset").value;
+  const s = {
+    preset,
+    base: $("#baseUrl").value.trim().replace(/\/+$/, ""),
+    model: $("#modelId").value.trim(),
+    key: $("#apiKey").value.trim(),
+    proxy: $("#proxyUrl").value.trim().replace(/\/+$/, ""),
+    remember: $("#rememberKey").checked
+  };
+  saveSettings(s);
+  toast("设置已保存");
+};
+
+function endpoint() {
+  const s = loadSettings();
+  const base = (s.proxy || s.base || "").replace(/\/+$/, "");
+  if (!base) throw new Error("还没有填 Base URL");
+  return /\/chat\/completions$/.test(base) ? base : base + "/chat/completions";
+}
+
+$("#btnTest").onclick = async () => {
+  const out = $("#testResult");
+  const s = { base: $("#baseUrl").value.trim(), model: $("#modelId").value.trim(), key: $("#apiKey").value.trim(), proxy: $("#proxyUrl").value.trim() };
+  if (!s.key) { out.innerHTML = '<span style="color:var(--danger)">先填 Key</span>'; return; }
+  const base = (s.proxy || s.base).replace(/\/+$/, "");
+  out.innerHTML = '<span class="busy"><i></i><i></i><i></i></span>';
+  try {
+    const res = await fetch(base + "/models", { headers: { Authorization: "Bearer " + s.key } });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    const n = (data.data || []).length;
+    out.innerHTML = '<span style="color:var(--ok)">连接正常' + (n ? " · " + n + " 个模型" : "") + '</span>';
+  } catch (e) {
+    out.innerHTML = '<span style="color:var(--danger)">' + esc(e.message === "Failed to fetch" ? "跨域被拦（需要代理）" : e.message) + '</span>';
+  }
+};
+
+/* ---------------- 调用模型 ---------------- */
+function buildPrompt() {
+  const mode = state.mode, defs = MODES[mode].dims, s = state.stats;
+  const a = s.a, b = s.b;
+  const stage = $("#stage").value;
+  const limit = +$("#sampleSize").value;
+  const timed = state.messages.filter(m => m.sender === a || m.sender === b);
+  const picked = timed.slice(-limit);
+  const step = Math.max(1, Math.ceil(picked.length / limit));
+  const lines = picked.filter((_, i) => i % step === 0).map(m => {
+    const t = m.time ? (m.time.getMonth() + 1) + "/" + m.time.getDate() + " " + String(m.time.getHours()).padStart(2, "0") + ":" + String(m.time.getMinutes()).padStart(2, "0") : "";
+    return (m.sender === a ? "我" : "对方") + (t ? "[" + t + "]" : "") + "：" + String(m.text).slice(0, 300);
+  }).join("\n");
+
+  const dimLines = defs.map(([k, n, w]) => "- " + k + "（" + n + "，权重 " + w + "%）").join("\n");
+
+  const M = MODES[mode];
+  const system = [
+    M.promptRole || "你是 CrushLens 的分析引擎，任务是把一段双人聊天整理成结构化观察，而不是给关系下判决。",
+    "模式：" + M.label + "，只" + M.brief + "。",
+    "六维（每维 0-100 的整数）：\n" + dimLines,
+    "规则：",
+    "1. 只依据聊天原文，不脑补未出现的信息；证据必须逐字摘自原文，长度 6-40 字。",
+    "2. 明确拒绝、回避、边界表达、控制或冷暴力要放进 cautions，不要包装成“还有机会”。",
+    "3. 不做心理诊断、不预测表白成功率、不给操控或试探话术。",
+    "4. next_message 是一句你现在就可以发的自然中文，具体、不油腻、不超过 40 字。",
+    "5. 分数要有区分度，不要都给 70 分左右。",
+    ...(M.rules || []),
+    "只输出 JSON，不要 markdown 代码块，不要解释。JSON 结构：",
+    '{"title":"6-12字的小标题","summary":"2-3句，客观描述这段聊天的状态","reading":"3-5句，展开你的读取","score_raw":整数,',
+    '"dimensions":{' + defs.map(([k]) => '"' + k + '":整数').join(",") + '},',
+    '"evidence":[{"quote":"原文","why":"为什么它重要","signal":"positive|neutral|caution"}],',
+    '"media_notes":[{"description":"这张图里有什么","signal":"它补了什么语境"}],',
+    '"next_message":"一句可以直接发的话","cautions":["需要留心的点"]}'
+  ].join("\n");
+
+  const statLines = [
+    "有效消息 " + s.n + " 条；" + a + " " + s.count[a] + " 条（" + s.pctA + "%），" + b + " " + s.count[b] + " 条（" + s.pctB + "%）",
+    "聊天天数 " + s.days.length + " 天，最长连续 " + s.streak + " 天；中位回复 " + fmtDur(s.medianReply),
+    "对话开启：" + a + " " + s.openers[a] + " 次，" + b + " " + s.openers[b] + " 次；提问 " + s.questions + " 次；深夜消息 " + s.late + " 条",
+    "平均字数：" + a + " " + s.avgA + "，" + b + " " + s.avgB
+  ].join("\n");
+
+  const user = [
+    (M.stageLabel || "关系阶段") + "：" + stage,
+    "双方：" + a + "（我）与 " + b + "（对方）",
+    "本地统计（不需要模型计算，仅作背景）：\n" + statLines,
+    state.media.length ? "本次附带 " + state.media.length + " 张图片，请一并阅读图片中的文字、画面与表情语境。" : "",
+    "聊天记录：\n" + lines
+  ].filter(Boolean).join("\n\n");
+
+  return { system, user };
+}
+
+function parseModelJSON(text) {
+  let t = String(text || "").trim();
+  t = t.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  const start = t.indexOf("{"), end = t.lastIndexOf("}");
+  if (start >= 0 && end > start) t = t.slice(start, end + 1);
+  return JSON.parse(t);
+}
+function validReport(r) {
+  if (!r || typeof r !== "object") return false;
+  if (!r.dimensions || typeof r.dimensions !== "object") return false;
+  return true;
+}
+async function callModel(system, user, opts = {}) {
+  const s = loadSettings();
+  if (!s.key) throw new Error("先在设置里填入 API Key");
+  const url = endpoint();
+  const content = [{ type: "text", text: user }];
+  if (state.media.length) state.media.forEach(m => content.push({ type: "image_url", image_url: { url: m.dataUrl } }));
+
+  const body = {
+    model: s.model || "gpt-4o-mini",
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: state.media.length ? content : user }
+    ],
+    temperature: 0.4
+  };
+  if (opts.json !== false) body.response_format = { type: "json_object" };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + s.key },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    const err = new Error("接口返回 HTTP " + res.status + (errText ? "：" + errText.slice(0, 160) : ""));
+    err.status = res.status;
+    throw err;
+  }
+  const data = await res.json();
+  const msg = data.choices && data.choices[0] && data.choices[0].message;
+  return msg ? String(msg.content || "") : "";
+}
+
+async function analyze() {
+  if (state.busy) return;
+  const a = $("#speakerA").value, b = $("#speakerB").value;
+  if (!a || !b || a === b) { toast("请选择两个不同的发送人"); return; }
+  state.stats = computeStats(state.messages, a, b);
+  state.report = null;
+  if (!state.stats.n) { toast("没有可分析的消息"); return; }
+
+  const s = loadSettings();
+  if (!s.base) { openSettings(); toast("先填 Base URL 和 API Key"); return; }
+
+  state.busy = true;
+  const btn = $("#btnAnalyze"), label = $("#analyzeLabel");
+  btn.disabled = true;
+  label.innerHTML = '<span class="busy"><i></i><i></i><i></i></span>';
+
+  $("#emptyState").classList.add("hidden");
+  $("#result").classList.add("hidden");
+  $("#loading").classList.remove("hidden");
+  $("#loadingTitle").textContent = "正在等模型返回…";
+  $("#loadingSub").textContent = "已读取 " + state.stats.n + " 条消息，模型通常需要 10–30 秒。";
+
+  const { system, user } = buildPrompt();
+  try {
+    let raw = "";
+    try {
+      raw = await callModel(system, user, { json: true });
+    } catch (e) {
+      // 不支持 JSON 模式 / 视觉模型差异时降级重试一次
+      raw = await callModel(system, user, { json: false });
+    }
+    let report;
+    try { report = parseModelJSON(raw); }
+    catch (e) {
+      const retryUser = user + "\n\n注意：上一次输出不是合法 JSON。请只输出一个 JSON 对象，以 { 开头、} 结尾。";
+      const raw2 = await callModel(system, retryUser, { json: false });
+      report = parseModelJSON(raw2);
+    }
+    if (!validReport(report)) throw new Error("模型输出缺少 dimensions 字段");
+    state.report = report;
+    renderResult();
+    toast("报告已生成");
+  } catch (e) {
+    $("#loading").classList.add("hidden");
+    $("#emptyState").classList.remove("hidden");
+    showStatsOnly();
+    const msg = String(e.message || e);
+    toast(msg === "Failed to fetch" ? "请求被浏览器拦下（跨域）。请在设置里填一个自己的反代地址。" : "生成失败：" + msg, 6000);
+  } finally {
+    state.busy = false;
+    btn.disabled = false;
+    label.textContent = "开始分析";
+  }
+}
+
+/* ---------------- 导出 HTML ---------------- */
+function exportHTML() {
+  const s = state.stats, r = state.report;
+  if (!s) return;
+  const dims = r ? r.dimensions || {} : {};
+  const score = r ? weightedScore(dims, state.mode) : 0;
+  const ev = r && Array.isArray(r.evidence) ? r.evidence : [];
+  const today = new Date().toLocaleString("zh-CN");
+
+  const css = "body{margin:0;background:#f7f3ef;color:#241d1a;font:15px/1.75 'PingFang SC','Microsoft YaHei',system-ui,sans-serif}" +
+    ".wrap{max-width:760px;margin:0 auto;padding:48px 24px 64px}" +
+    "h1{font-size:26px;margin:0 0 6px;letter-spacing:-.02em}.sub{color:#8a7a70;font-size:13px;margin-bottom:32px}" +
+    ".card{background:#fff;border:1px solid #e8dfd8;border-radius:14px;padding:22px 24px;margin-bottom:18px}" +
+    ".score{display:flex;align-items:baseline;gap:12px}.num{font-size:52px;font-weight:600;letter-spacing:-.03em;line-height:1}" +
+    ".dimrow{display:flex;align-items:center;gap:10px;margin:9px 0;font-size:13px}.dimrow b{width:72px;font-weight:500}" +
+    ".track{flex:1;height:6px;background:#efe7e0;border-radius:99px;overflow:hidden}.fill{display:block;height:100%;background:linear-gradient(90deg,#e4556b,#d9a55f)}" +
+    ".dimrow i{width:30px;text-align:right;font-style:normal;color:#8a7a70}" +
+    ".ev{border-left:2px solid #e4556b;padding:8px 0 8px 12px;margin:10px 0;font-size:13.5px}" +
+    ".ev.caution{border-color:#c65b4b}.ev p{margin:4px 0 0;color:#6f6058;font-size:12.5px}" +
+    ".next{background:#fdeef0;border-radius:10px;padding:14px 16px;font-size:15px}" +
+    ".caution{color:#8a5a3a;font-size:13px}" +
+    "footer{color:#a2938a;font-size:11.5px;text-align:center;margin-top:34px;line-height:1.8}" +
+    ".radar{display:block;width:180px;height:180px;margin:0 auto}.radar .grid-line{fill:none;stroke:#ece3db;stroke-width:1}" +
+    ".radar .axis{stroke:#ece3db;stroke-width:1}.radar .area{fill:rgba(228,85,107,.12);stroke:#e4556b;stroke-width:1.6;stroke-linejoin:round}" +
+    ".radar .pt{fill:#e4556b}.radar text{font-size:9px;fill:#8a7a70}" +
+    "table{width:100%;border-collapse:collapse;font-size:13px}td{padding:6px 0;border-bottom:1px solid #f0e8e1}td:last-child{text-align:right;font-variant-numeric:tabular-nums}";
+
+  const rows = [
+    ["有效消息", s.n + " 条"], ["聊天天数", s.days.length + " 天"], ["中位回复", fmtDur(s.medianReply)],
+    ["互动比例", s.a + " " + s.pctA + "% · " + s.b + " " + s.pctB + "%"],
+    ["平均字数", s.avgA + " / " + s.avgB], ["深夜消息", s.late + " 条"]
+  ];
+
+  const M = MODES[state.mode];
+  let body = '<div class="wrap"><h1>' + esc(M.docTitle || "心动镜 · 关系读取") + '</h1>' +
+    '<div class="sub">' + esc(M.label) + ' · ' + esc(s.a) + ' 与 ' + esc(s.b) + ' · 生成于 ' + esc(today) + '</div>';
+
+  body += '<div class="card"><div class="score"><span class="num">' + (r ? score : "—") + '</span>' +
+    '<div><b>' + esc((r && r.title) || "本地统计") + '</b><div style="color:#8a7a70;font-size:12.5px">' + (r ? "六维加权" + (M.scoreLabel || "关系分") : "尚未生成 AI 报告") + '</div></div></div>' +
+    (r && r.summary ? '<p style="margin-top:14px">' + esc(r.summary) + '</p>' : "") + '</div>';
+
+  body += '<div class="card">' + rows.map(([k, v]) => '<table><tr><td>' + esc(k) + '</td><td>' + esc(v) + '</td></tr></table>').join("") + '</div>';
+
+  if (r) {
+    body += '<div class="card">' + MODES[state.mode].dims.map(([k, n, w]) =>
+      '<div class="dimrow"><b>' + n + '</b><span class="track"><span class="fill" style="width:' + clamp(dims[k]) + '%"></span></span><i>' + clamp(dims[k]) + '</i></div>').join("") + '</div>';
+    body += '<div class="card"><h3 style="font-size:14px;margin:0 0 10px">六维雷达</h3>' + radarSVG(dims, state.mode) + '</div>';
+    if (r.reading) body += '<div class="card"><h3 style="font-size:14px;margin:0 0 8px">整体读取</h3><p>' + esc(r.reading) + '</p></div>';
+    if (ev.length) {
+      body += '<div class="card"><h3 style="font-size:14px;margin:0">' + esc(M.evidenceTitle || "心动证据") + '</h3>' + ev.map(e =>
+        '<div class="ev ' + (e.signal === "caution" ? "caution" : "") + '">' + esc(e.quote || "") +
+        (e.why ? '<p>' + esc(e.why) + '</p>' : "") + '</div>').join("") + '</div>';
+    }
+    if (r.next_message) body += '<div class="card"><h3 style="font-size:14px;margin:0 0 10px">' + esc(M.nextTitle || "下一句可以这样说") + '</h3><div class="next">' + esc(r.next_message) + '</div></div>';
+    if (r.cautions && r.cautions.length) body += '<div class="card"><h3 style="font-size:14px;margin:0 0 8px">' + esc(M.cautionTitle || "需要留心") + '</h3>' + r.cautions.map(c => '<div class="caution">· ' + esc(c) + '</div>').join("") + '</div>';
+  }
+
+  body += '<footer>' + esc(M.footer || "由心动镜网页版生成。分数是聊天中呈现出的互动信号，不是心理诊断，也不是去留建议。如果关系里存在控制、威胁、羞辱或暴力，请优先寻求现实支持。") + '</footer></div>';
+
+  const html = '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(M.docTitle || "心动镜 · 关系读取") + '</title>' +
+    '<style>' + css + '</style></head><body>' + body + '</body></html>';
+
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "心动镜-报告-" + new Date().toISOString().slice(0, 10) + ".html";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/* ---------------- 档案 ---------------- */
+function getSessions() {
+  try { return JSON.parse(localStorage.getItem(LS_SESSIONS) || "[]"); } catch (e) { return []; }
+}
+function saveCurrentSession() {
+  if (!state.stats || !state.report) return;
+  const a = state.stats.a, b = state.stats.b;
+  const list = getSessions();
+  const item = {
+    id: Date.now().toString(36),
+    title: (state.report.title || "未命名") + " · " + a + " × " + b,
+    mode: state.mode,
+    created: new Date().toISOString(),
+    chat: $("#chat").value.slice(0, 200000),
+    a, b, stage: $("#stage").value,
+    report: state.report
+  };
+  list.unshift(item);
+  try {
+    localStorage.setItem(LS_SESSIONS, JSON.stringify(list.slice(0, 30)));
+    toast("已存到本机档案");
+    renderSessions();
+  } catch (e) {
+    toast("存不下了：浏览器本地空间不足");
+  }
+}
+function renderSessions() {
+  const list = getSessions();
+  const box = $("#sessList");
+  if (!list.length) { box.innerHTML = '<div style="font-size:12.5px;color:var(--faint);padding:12px 0">还没有档案。生成报告后点「存到本机档案」。</div>'; return; }
+  box.innerHTML = list.map(s =>
+    '<div class="sess" data-id="' + s.id + '"><div class="t"><b>' + esc(s.title) + '</b><span>' +
+    new Date(s.created).toLocaleString("zh-CN") + ' · ' + esc(MODES[s.mode] ? MODES[s.mode].label : "") + '</span></div>' +
+    '<button class="del" type="button" data-del="' + s.id + '" aria-label="删除">✕</button></div>').join("");
+  $$(".sess", box).forEach(el => el.onclick = (e) => {
+    if (e.target.closest("[data-del]")) return;
+    openSession(el.dataset.id);
+  });
+  $$("[data-del]", box).forEach(b => b.onclick = (e) => {
+    e.stopPropagation();
+    const id = b.dataset.del;
+    localStorage.setItem(LS_SESSIONS, JSON.stringify(getSessions().filter(x => x.id !== id)));
+    renderSessions();
+  });
+}
+function openSession(id) {
+  const s = getSessions().find(x => x.id === id);
+  if (!s) return;
+  $("#chat").value = s.chat;
+  state.mode = s.mode || "crush";
+  syncMode();
+  refreshParse();
+  $("#speakerA").value = s.a; $("#speakerB").value = s.b;
+  if (s.stage) $("#stage").value = s.stage;
+  state.stats = computeStats(state.messages, s.a, s.b);
+  state.report = s.report;
+  $("#archiveDlg").close();
+  renderResult();
+  toast("已打开档案");
+}
+$("#btnArchive").onclick = () => { renderSessions(); $("#archiveDlg").showModal(); };
+$("#btnCloseArchive").onclick = () => $("#archiveDlg").close();
+
+/* ---------------- 图片 ---------------- */
+function resizeImage(file, cb) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    const max = 1400;
+    let { width: w, height: h } = img;
+    if (Math.max(w, h) > max) { const k = max / Math.max(w, h); w = Math.round(w * k); h = Math.round(h * k); }
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    c.getContext("2d").drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(url);
+    cb(c.toDataURL("image/jpeg", 0.88));
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); toast("这张图读不出来"); };
+  img.src = url;
+}
+function addMedia(files) {
+  const list = Array.from(files || []).filter(f => /^image\//.test(f.type));
+  if (!list.length) return;
+  list.slice(0, 6 - state.media.length).forEach(f => {
+    if (f.size > 24 * 1024 * 1024) { toast("单张图不要超过 24MB"); return; }
+    resizeImage(f, dataUrl => {
+      state.media.push({ name: f.name, dataUrl });
+      renderMedia();
+    });
+  });
+}
+function renderMedia() {
+  const box = $("#thumbs");
+  box.innerHTML = state.media.map((m, i) =>
+    '<div class="thumb"><img src="' + m.dataUrl + '" alt=""><button type="button" data-i="' + i + '" aria-label="移除">✕</button></div>').join("");
+  $$("[data-i]", box).forEach(b => b.onclick = () => { state.media.splice(+b.dataset.i, 1); renderMedia(); });
+  $("#btnAddMedia").style.display = state.media.length >= 6 ? "none" : "";
+}
+$("#btnAddMedia").onclick = () => {
+  const input = document.createElement("input");
+  input.type = "file"; input.accept = "image/*"; input.multiple = true;
+  input.onchange = () => addMedia(input.files);
+  input.click();
+};
+
+/* ---------------- 文件导入 ---------------- */
+function loadFile(file) {
+  if (!file) return;
+  if (file.size > 8 * 1024 * 1024) { toast("文件太大，先剪一段再导入"); return; }
+  if (/^image\//.test(file.type)) { addMedia([file]); return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    $("#chat").value = String(reader.result || "");
+    $("#fileHint").textContent = "已导入：" + file.name;
+    refreshParse();
+  };
+  reader.readAsText(file, "utf-8");
+}
+$("#fileInput").onchange = (e) => loadFile(e.target.files[0]);
+$("#dropZone").addEventListener("dragover", e => { e.preventDefault(); $("#dropZone").classList.add("over"); });
+$("#dropZone").addEventListener("dragleave", () => $("#dropZone").classList.remove("over"));
+$("#dropZone").addEventListener("drop", e => {
+  e.preventDefault(); $("#dropZone").classList.remove("over");
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+$("#chat").addEventListener("dragover", e => e.preventDefault());
+$("#chat").addEventListener("drop", e => {
+  e.preventDefault();
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+
+/* ---------------- 模式 ---------------- */
+function syncMode() {
+  const M = MODES[state.mode];
+  $$("#modeSeg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode)));
+  $("#modeDesc").innerHTML = M.desc;
+  $("#stage").innerHTML = M.stages.map(s => '<option>' + s + '</option>').join("");
+  $("#labelA").textContent = M.labelA || "我是";
+  $("#labelB").textContent = M.labelB || "对方是";
+  $("#labelStage").textContent = M.stageLabel || "关系阶段";
+  $("#chat").placeholder = M.placeholder || "把聊天粘贴到这里。支持微信 / QQ / WhatsApp / JSON：\n\n林晚 2026年9月20日 21:14\n在吗\n我 2026年9月20日 21:15\n在的，刚到家";
+  $("#emptyTitle").textContent = M.emptyTitle || "先看清事实，再谈感受";
+  $("#emptySub").textContent = M.emptySub || "粘贴聊天后，消息量、互动天平、回复节奏这些会立刻算出来——不需要 Key。想要 AI 报告，再在「设置」里填自己的 API。";
+  $("#stepWho").innerHTML = '<i>2</i>' + (M.stepWho || "确认你和他");
+}
+$("#modeSeg").addEventListener("click", e => {
+  const b = e.target.closest("button[data-mode]");
+  if (!b) return;
+  state.mode = b.dataset.mode;
+  syncMode();
+});
+
+/* ---------------- 事件绑定 ---------------- */
+$("#themeFab").onclick = cycleTheme;
+let debounce = 0;
+$("#chat").addEventListener("input", () => {
+  clearTimeout(debounce);
+  debounce = setTimeout(refreshParse, 260);
+});
+$("#speakerA").onchange = () => { if ($("#speakerA").value === $("#speakerB").value) refreshParse(); refreshParse(); };
+$("#speakerB").onchange = () => refreshParse();
+$("#btnAnalyze").onclick = analyze;
+
+/* ---------------- 示例数据 ---------------- */
+const DEMO_CHAT = [
+  "林晚: 2026-09-14 21:02", "今天路过你们学校门口，看到那家关了的奶茶店",
+  "我: 2026-09-14 21:05", "啊那家！我大一几乎天天喝",
+  "林晚: 2026-09-14 21:06", "猜到了，你朋友圈发过",
+  "我: 2026-09-14 21:07", "你居然记得",
+  "林晚: 2026-09-14 21:09", "记性还行吧",
+  "林晚: 2026-09-15 12:40", "吃饭了吗",
+  "我: 2026-09-15 12:52", "刚下课，准备去吃",
+  "林晚: 2026-09-15 12:53", "那快去，别又拖到下午",
+  "我: 2026-09-15 12:54", "你怎么知道我会拖",
+  "林晚: 2026-09-15 12:55", "你上次说到三点才吃",
+  "我: 2026-09-15 13:20", "吃完了，今天很听话",
+  "林晚: 2026-09-15 13:21", "乖",
+  "林晚: 2026-09-16 23:11", "还没睡？",
+  "我: 2026-09-16 23:12", "在赶一个报告，头疼",
+  "林晚: 2026-09-16 23:13", "别熬太晚，明天还要早起吧",
+  "我: 2026-09-16 23:15", "嗯，还有一点",
+  "林晚: 2026-09-16 23:16", "那我不吵你了，弄完跟我说一声",
+  "我: 2026-09-17 00:02", "弄完了，睡了",
+  "林晚: 2026-09-17 07:48", "早，昨晚睡够了吗",
+  "我: 2026-09-17 08:30", "勉强，困",
+  "林晚: 2026-09-17 08:31", "中午补个觉",
+  "林晚: 2026-09-18 19:22", "周末有空吗",
+  "我: 2026-09-18 19:40", "周六下午应该可以",
+  "林晚: 2026-09-18 19:41", "那去看那个展？你之前说想去的",
+  "我: 2026-09-18 19:43", "你还记得啊",
+  "林晚: 2026-09-18 19:44", "嗯，我记性比你好",
+  "我: 2026-09-18 19:45", "行，那周六",
+  "林晚: 2026-09-18 19:46", "好，我订票，你别迟到",
+  "我: 2026-09-18 19:47", "尽量",
+  "林晚: 2026-09-18 19:47", "什么叫尽量",
+  "我: 2026-09-18 19:48", "就是尽量不迟到",
+  "林晚: 2026-09-18 19:49", "行吧，我信你一次",
+  "林晚: 2026-09-19 22:30", "今天挺开心的",
+  "我: 2026-09-19 22:41", "我也是，那个展厅比想象中好玩",
+  "林晚: 2026-09-19 22:42", "你认真看展的样子有点好笑",
+  "我: 2026-09-19 22:43", "哪里好笑",
+  "林晚: 2026-09-19 22:44", "就，很专注，像在考试",
+  "我: 2026-09-19 22:45", "下次还去吗",
+  "林晚: 2026-09-19 22:46", "去啊，不过下次你请我吃饭",
+  "我: 2026-09-19 22:47", "成交",
+  "林晚: 2026-09-19 22:48", "那我记下了",
+  "林晚: 2026-09-20 23:40", "到家了跟我说一声",
+  "我: 2026-09-20 23:52", "到了，刚洗完澡",
+  "林晚: 2026-09-20 23:53", "好，早点睡",
+  "我: 2026-09-20 23:55", "你也是，晚安",
+  "林晚: 2026-09-20 23:56", "晚安"
+].join("\n");
+
+const DEMO_REPORT = {
+  title: "她在主动靠近",
+  summary: "对方在这段聊天里主动开启话题、记得你说过的细节，并多次把话题推向线下见面；你回应积极，但主动性略低。",
+  reading: "她记得你提过的店、你说过的作息，甚至替你记着「下次请我吃饭」这种约定——这类细节记忆通常意味着注意力在你身上。周末看展是她提出的具体邀约，并且主动承担订票，行动信号明确。你这边回应稳定、情绪正面，但多数时候是她先开口，回复也偏短。整体是一段双向都在推进、她稍微更主动一些的关系。",
+  score_raw: 78,
+  dimensions: { initiative: 62, responsiveness: 80, care: 79, openness: 66, intimacy: 72, action: 84 },
+  evidence: [
+    { quote: "猜到了，你朋友圈发过", why: "记得你发过的内容，说明平时在留意你。", signal: "positive" },
+    { quote: "那我不吵你了，弄完跟我说一声", why: "既给空间又要一个回音，是克制的关心。", signal: "positive" },
+    { quote: "那去看那个展？你之前说想去的", why: "把你提过的愿望变成具体邀约，行动力强。", signal: "positive" },
+    { quote: "好，我订票，你别迟到", why: "主动承担成本，同时带一点撒娇式的期待。", signal: "positive" }
+  ],
+  media_notes: [],
+  next_message: "展看完了还在想那幅蓝色的画。下次吃饭我请，地方你挑。",
+  cautions: ["你的主动开启明显少于对方，长期单向推动容易让人累", "「尽量不迟到」这类模糊回应可以换成确定的承诺"]
+};
+
+const DEMO_REPORT_COUPLE = {
+  title: "稳定，但主动在上游",
+  summary: "这段聊天里有明显的照顾、报备和见面安排，关系是稳的；但开启话题、提出邀约基本由同一方承担，投入的方向不太对称。",
+  reading: "对方记得你的作息、在你赶报告时给空间也要求回音，周末的展也是她提出并承担订票——这些都是稳定关系里的投入信号。你回应得稳、情绪正面，但很少主动开启，也几乎不提未来。久而久之，热情会集中在一个人身上，摩擦时更容易变成「我一直在推」。",
+  score_raw: 76,
+  dimensions: { security: 78, reciprocity: 60, repair: 68, boundary: 84, intimacy: 72, future: 54 },
+  evidence: [
+    { quote: "那我不吵你了，弄完跟我说一声", why: "给空间又要回音，是稳定关系里的照顾方式。", signal: "positive" },
+    { quote: "好，我订票，你别迟到", why: "主动承担安排，但同时把期待说清楚。", signal: "positive" },
+    { quote: "行吧，我信你一次", why: "表面玩笑，底下是对「尽量」这类模糊承诺的在意。", signal: "caution" }
+  ],
+  media_notes: [],
+  next_message: "下次我来定，周六下午两点那个展，票我先买好了。",
+  cautions: ["主动开启和邀约几乎都在对方身上，长期会累积疲惫", "被问到「下次」时多用确定表达，少用「尽量」「看情况」"]
+};
+
+const DEMO_CHAT_CLIENT = [
+  "客户-王总: 2026-09-21 10:02", "之前那个方案，你们能做到多少并发？",
+  "我: 2026-09-21 10:06", "标准配置 500 并发，扩容到 2000 也没问题",
+  "客户-王总: 2026-09-21 10:09", "价格呢？我们预算大概 30 万",
+  "我: 2026-09-21 10:12", "30 万可以覆盖基础版加一年运维，我明天把明细发您",
+  "客户-王总: 2026-09-21 10:15", "好，另外能不能对接我们现有的 CRM",
+  "我: 2026-09-21 10:18", "可以，走标准 API，需要您那边给一个测试账号",
+  "客户-王总: 2026-09-21 14:30", "账号我让 IT 准备了，明天发你",
+  "我: 2026-09-21 14:32", "好的。另外想问下，最终拍板是您这边还是技术那边",
+  "客户-王总: 2026-09-21 14:40", "我还要跟我们 CTO 报一下",
+  "我: 2026-09-21 14:42", "明白，那我把方案整理成一页给 CTO 看的版本，周四前发您",
+  "客户-王总: 2026-09-21 14:45", "可以，周四我们内部开会",
+  "我: 2026-09-21 14:47", "周四上午我把材料发您，会后我再跟您对一下意见",
+  "客户-王总: 2026-09-22 09:20", "材料收到了，报价能不能再降 5 个点",
+  "我: 2026-09-22 09:26", "这个我得跟老板申请，今天下班前给您准信",
+  "客户-王总: 2026-09-22 09:28", "行，等你好消息"
+].join("\n");
+
+const DEMO_REPORT_CLIENT = {
+  title: "节奏在线，球在对方场",
+  summary: "需求、预算、对接方式都问到了，也约了具体时间点；但「降 5 个点」还没给准信，CTO 这条决策链也只是刚摸到，现在不适合再加承诺。",
+  reading: "这轮沟通的节奏是好的：客户主动给了预算区间，你当场把并发、价格范围、对接方式对上了，并且把「给 CTO 的一页方案」和「周四上午」这两个具体动作固定下来。风险在于价格：对方要降 5 个点，你只说了「今天下班前给准信」，没有先换条件（比如付款周期、范围收紧），容易被单方面压价。另外决策人是 CTO 而不是王总，方案要按技术视角重写，别只讲商务。",
+  score_raw: 72,
+  dimensions: { needs: 70, pace: 78, pro: 82, trust: 74, push: 80, deal: 58 },
+  evidence: [
+    { quote: "30 万可以覆盖基础版加一年运维", why: "客户给了明确预算，你当场给出范围，信息对称。", signal: "positive" },
+    { quote: "我还要跟我们 CTO 报一下", why: "决策链露出关键人，方案要按技术视角准备。", signal: "positive" },
+    { quote: "报价能不能再降 5 个点", why: "价格进入谈判，需要拿条件换，而不是直接让。", signal: "caution" },
+    { quote: "这个我得跟老板申请，今天下班前给您准信", why: "给了具体时间点，但没绑定交换条件。", signal: "caution" }
+  ],
+  media_notes: [],
+  next_message: "王总，5 个点的申请今天下班前给您准信；如果可以按季度预付，我这边更好批。给 CTO 的一页方案周四上午一起发您。",
+  cautions: [
+    "决策人是 CTO，王总只负责转达，别再默认他能单独拍板",
+    "降价 5 个点还没换到任何条件（付款周期 / 范围 / 年限），先谈条件再谈价格",
+    "CRM 测试账号还没拿到，接口联调有卡住的风险"
+  ]
+};
+
+const DEMO_SETS = {
+  crush: { chat: DEMO_CHAT, report: DEMO_REPORT, a: "我", b: "林晚", mode: "crush" },
+  couple: { chat: DEMO_CHAT, report: DEMO_REPORT_COUPLE, a: "我", b: "林晚", mode: "couple" },
+  client: { chat: DEMO_CHAT_CLIENT, report: DEMO_REPORT_CLIENT, a: "我", b: "客户-王总", mode: "client" }
+};
+
+function loadDemo(mode) {
+  const d = DEMO_SETS[mode] || DEMO_SETS.crush;
+  state.mode = d.mode;
+  syncMode();
+  $("#chat").value = d.chat;
+  refreshParse();
+  $("#speakerA").value = d.a;
+  $("#speakerB").value = d.b;
+  state.stats = computeStats(state.messages, d.a, d.b);
+  state.report = d.report;
+  renderResult();
+  toast("这是「" + MODES[d.mode].label + "」示例报告，不消耗 API");
+}
+$("#btnDemo").onclick = () => loadDemo(state.mode);
+const demoClientBtn = $("#btnDemoClient");
+if (demoClientBtn) demoClientBtn.onclick = () => loadDemo("client");
+
+/* ---------------- 启动 ---------------- */
+function boot() {
+  applyTheme(currentTheme(), false);
+  syncMode();
+  fillPresets();
+  const s = loadSettings();
+  if (s.base) { $("#preset").value = String(s.preset || 0); }
+  refreshParse();
+  // 记住的 Key 恢复到会话
+  if (s.key) sessionStorage.setItem(SS_KEY, s.key);
+  if (!s.base) {
+    setTimeout(() => toast("先点右上角「设置」填 Base URL 和 Key；也可以直接用示例看效果", 4200), 900);
+  }
+}
+boot();
+</script>
+</body>
+</html>
