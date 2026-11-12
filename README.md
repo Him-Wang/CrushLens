@@ -1,6 +1,8 @@
 # CrushLens 心动镜 · v1.2
 
 > 本地优先的聊天好感度分析工具。一个绿色、便携的 Windows exe，不需要安装，不写注册表，不上传聊天到任何 CrushLens 服务器。
+> **网页版（在线，免安装）**：[https://him-wang.github.io/CrushLens/](https://him-wang.github.io/CrushLens/) — 同一套分析在浏览器里跑，聊天只在本机解析；也可以下 [v1.3.0 Release](https://github.com/Him-Wang/CrushLens/releases/tag/v1.3.0) 里的 `CrushLens-web-1.3.0.zip` 本地打开。
+
 
 ![分析台](screenshots/analysis.png)
 
