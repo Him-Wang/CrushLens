@@ -14,7 +14,8 @@
     me: null, role: null, partners: [], pid: null,
     view: 'overview', range: 30, timer: null, lastRt: null, parsed: null,
     bridge: {
-      ok: false, info: null, error: null, apps: [], contacts: [],
+      ok: false, needPair: false, info: null, error: null, contactsErr: null,
+      apps: [], contacts: [], inboxOnly: true,
       links: {}, auto: false, q: '', sort: 'recent', busy: false, scanning: false
     }
   };
@@ -388,6 +389,12 @@
       </table></div>` : `<div class="empty" style="padding:26px"><p>还没有导入记录</p></div>`;
   }
 
+  // 报告要跟着对象的模式走，不能一律写成 crush
+  function modeOf(pid) {
+    const p = (state.partners || []).find((x) => x.id === pid);
+    return (p && p.mode) || 'crush';
+  }
+
   function sliceRange(arr, n) {
     if (!arr) return [];
     return arr.slice(-n);
@@ -455,7 +462,9 @@
     bindGo();
     const box = $('#pchart');
     if (box && !a.empty) {
-      box.appendChild(trendChart({ daily: a.daily, ma: a.ma, forecast: a.forecast, changePoints: a.changePoints, height: 260 }));
+      const chartDaily = sliceRange(a.daily, state.range);
+      const chartMa = sliceRange(a.ma, chartDaily.length);
+      box.appendChild(trendChart({ daily: chartDaily, ma: chartMa, forecast: a.forecast, changePoints: a.changePoints, height: 260 }));
     }
     $$('[data-open-report]').forEach((b) => b.onclick = async () => {
       const r = (await S.reportsOf(state.pid)).find((x) => x.id === +b.dataset.openReport);
@@ -688,7 +697,7 @@
 
     async function readFile(f) {
       if (f.size > 8 * 1024 * 1024) { toast('文件太大，建议先拆分', 'error'); return; }
-      const text = await f.text();
+      const text = decodeText(await f.arrayBuffer());
       $('#pasteArea').value = text;
       $('#previewCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
       state.fileName = f.name;
@@ -697,6 +706,22 @@
   }
 
   let pendingParse = null;
+
+  /* 解码：BOM 优先，UTF-8 失败回退 GB18030。
+     中文 Windows 上 QQ / 微信导出的 txt 很多是 GBK，直接按 UTF-8 读会整篇乱码。 */
+  function decodeText(buf) {
+    const u8 = new Uint8Array(buf);
+    if (u8.length >= 3 && u8[0] === 0xEF && u8[1] === 0xBB && u8[2] === 0xBF) {
+      return new TextDecoder('utf-8').decode(u8.subarray(3));
+    }
+    if (u8.length >= 2 && u8[0] === 0xFF && u8[1] === 0xFE) return new TextDecoder('utf-16le').decode(u8.subarray(2));
+    if (u8.length >= 2 && u8[0] === 0xFE && u8[1] === 0xFF) return new TextDecoder('utf-16be').decode(u8.subarray(2));
+    const utf8 = new TextDecoder('utf-8').decode(u8);
+    if (utf8.indexOf('\uFFFD') >= 0) {
+      try { return new TextDecoder('gb18030').decode(u8); } catch (e) { /* 浏览器不支持就算了 */ }
+    }
+    return utf8;
+  }
 
   function doParse(text, fileName) {
     const raw = text != null ? text : ($('#pasteArea') ? $('#pasteArea').value : '');
@@ -785,7 +810,7 @@
       await loadPartners();
       const { a } = await compute(pid);
       if (!a.empty) {
-        await S.saveReport(state.me.id, pid, a, 'crush');
+        await S.saveReport(state.me.id, pid, a, modeOf(pid));
         await S.updatePartner(state.me.id, pid, { lastAnalysis: a.total });
       }
 
@@ -1010,7 +1035,22 @@
   /* ================= 直连本机 ================= */
   const BRIDGE_BASE = 'http://127.0.0.1:17321';
   const IS_WIN = /Windows/i.test(navigator.userAgent);
-  const SC = location.search || '';
+
+  /* ---- 设计说明 ----
+     助手 v2 起不再对任意网页开放：必须先用助手窗口里的 6 位配对码换 Token，
+     之后所有 /api/* 请求都带 X-Bridge-Token。Token 存在本机 localStorage，
+     助手重启后失效，页面会自动回到配对界面。 */
+
+  function bridgeTokenKey() { return 'crushlens_bridge_token'; }
+  function getToken() {
+    try { return localStorage.getItem(bridgeTokenKey()) || ''; } catch (e) { return ''; }
+  }
+  function setToken(t) {
+    try {
+      if (t) localStorage.setItem(bridgeTokenKey(), t);
+      else localStorage.removeItem(bridgeTokenKey());
+    } catch (e) { }
+  }
 
   function timeoutSignal(ms) {
     if (window.AbortSignal && AbortSignal.timeout) return AbortSignal.timeout(ms);
@@ -1019,23 +1059,62 @@
     return ac.signal;
   }
 
-  async function bGet(path, ms) {
+  async function bFetch(path, opts) {
+    const o = opts || {};
+    const headers = {};
+    const tk = getToken();
+    if (tk) headers['X-Bridge-Token'] = tk;
     const r = await fetch(BRIDGE_BASE + path, {
+      method: o.method || 'GET',
       cache: 'no-store',
-      signal: timeoutSignal(ms || 4000)
+      headers,
+      signal: timeoutSignal(o.ms || 4000)
     });
-    if (!r.ok) throw new Error('助手返回 ' + r.status);
+    if (r.status === 401) {
+      const err = new Error('unauthorized');
+      err.code = 401;
+      throw err;
+    }
+    if (!r.ok) {
+      const err = new Error('助手返回 ' + r.status);
+      err.code = r.status;
+      throw err;
+    }
     return r.json();
+  }
+
+  async function bGet(path, ms) { return bFetch(path, { ms }); }
+  async function bPost(path, ms) { return bFetch(path, { ms, method: 'POST' }); }
+
+  async function bridgePair(code) {
+    const d = await bFetch('/api/pair?code=' + encodeURIComponent(String(code || '').trim()), { ms: 6000, method: 'POST' });
+    if (d && d.token) { setToken(d.token); return true; }
+    return false;
   }
 
   async function bridgeProbe() {
     const b = state.bridge;
+    b.needPair = false;
+    // 1) 公开探活：只说明「本机有助手在跑」
     try {
-      b.info = await bGet('/api/hello', 2000);
-      b.ok = true; b.error = null;
+      await bFetch('/api/ping', { ms: 2500, method: 'GET' });
+    } catch (err) {
+      b.ok = false; b.info = null; b.needPair = false;
+      b.error = err && err.name === 'AbortError' ? 'timeout' : (err.message || 'unreachable');
+      return false;
+    }
+    // 2) 有 Token 才算真正连上
+    if (!getToken()) {
+      b.ok = false; b.info = null; b.needPair = true; b.error = null;
+      return false;
+    }
+    try {
+      b.info = await bGet('/api/hello', 3000);
+      b.ok = true; b.error = null; b.needPair = false;
     } catch (err) {
       b.ok = false; b.info = null;
-      b.error = err && err.name === 'AbortError' ? 'timeout' : (err.message || 'unreachable');
+      if (err && err.code === 401) { setToken(''); b.needPair = true; b.error = null; }
+      else b.error = err && err.name === 'AbortError' ? 'timeout' : (err.message || 'unreachable');
     }
     return b.ok;
   }
@@ -1044,7 +1123,10 @@
     try {
       const d = await bGet('/api/apps', 8000);
       state.bridge.apps = d.apps || [];
-    } catch (e) { state.bridge.apps = []; }
+    } catch (e) {
+      state.bridge.apps = [];
+      if (e && e.code === 401) state.bridge.needPair = true;
+    }
   }
 
   async function loadBridgeContacts() {
@@ -1052,7 +1134,14 @@
       const d = await bGet('/api/contacts', 15000);
       state.bridge.contacts = d.contacts || [];
       state.bridge.inbox = d.inbox || '';
-    } catch (e) { state.bridge.contacts = []; }
+      state.bridge.inboxOnly = !!d.inboxOnly;
+      state.bridge.contactsErr = null;
+    } catch (e) {
+      state.bridge.contacts = [];
+      if (e && e.code === 401) state.bridge.needPair = true;
+      // 失败不能静默成「投递箱是空的」，否则用户会以为没数据
+      state.bridge.contactsErr = (e && e.code) ? ('读取失败（' + e.code + '）') : '读取失败：连不上助手';
+    }
   }
 
   /* ---- 本地记住「哪个联系人导进了哪个对象」 ---- */
@@ -1085,6 +1174,9 @@
     if (b.ok) {
       return `<span class="conn on"><i></i>已连接 · ${esc((b.info && b.info.host) || '本机')}</span>`;
     }
+    if (b.needPair) {
+      return `<span class="conn off"><i></i>助手已启动 · 待配对</span>`;
+    }
     return `<span class="conn off"><i></i>未连接</span>`;
   }
 
@@ -1095,13 +1187,78 @@
       '不用再手动找文件：连上这台电脑，直接点一个人，一键把聊天记录搬进来',
       `${connBadge()}<button class="btn ghost sm" id="bRefresh">${icon('refresh', 14)} 重新检测</button>`
     );
-    $('#main').innerHTML = headHtml + (b.ok ? localOnlineHtml() : localOfflineHtml());
+    let body;
+    if (b.ok) body = localOnlineHtml();
+    else if (b.needPair) body = localPairHtml();
+    else body = localOfflineHtml();
+    $('#main').innerHTML = headHtml + body;
     $('#bRefresh').onclick = async () => {
       await viewLocal();
-      toast(state.bridge.ok ? '已连接本机助手' : '还没检测到助手', state.bridge.ok ? '' : 'warn');
+      const s = state.bridge;
+      toast(s.ok ? '已连接本机助手' : (s.needPair ? '助手在运行，等你输入配对码' : '还没检测到助手'), s.ok ? '' : 'warn');
     };
     if (b.ok) bindLocalOnline();
+    else if (b.needPair) bindLocalPair();
     else bindLocalOffline();
+  }
+
+  /* ---------- 待配对：输入助手窗口里的 6 位配对码 ---------- */
+  function localPairHtml() {
+    return `
+      <div class="card pad mb16" style="max-width:520px">
+        <div class="bridge-hero">
+          <div class="bh-ico">${icon('lock', 22)}</div>
+          <div style="min-width:0">
+            <h3>最后一步：输入配对码</h3>
+            <p class="small muted mt8">
+              助手已经在你电脑上跑起来了。为了不让别的网页偷偷读你的聊天记录，
+              助手每次启动都会生成一个新的 6 位配对码，显示在它的黑色窗口里。
+            </p>
+          </div>
+        </div>
+        <div class="mt16">
+          <label class="tiny muted" style="display:block;margin-bottom:6px">配对码（6 位数字）</label>
+          <input id="pairCode" class="input" inputmode="numeric" maxlength="6" autocomplete="one-time-code"
+                 placeholder="例如 482913" style="font-family:var(--mono);font-size:20px;letter-spacing:6px;text-align:center">
+          <div id="pairMsg" class="tiny mt8" style="color:var(--danger);min-height:18px"></div>
+          <button class="btn primary mt8" id="pairBtn" style="width:100%">连接这台电脑</button>
+        </div>
+        <div class="card-foot tiny muted mt16">
+          找不到配对码？回到那个黑色窗口，第一行黄字就是。
+          关掉助手窗口再重新双击「启动助手.bat」，会生成一个新的。
+        </div>
+      </div>
+    `;
+  }
+
+  function bindLocalPair() {
+    const inp = $('#pairCode');
+    const btn = $('#pairBtn');
+    const msg = $('#pairMsg');
+    if (!inp || !btn) return;
+    inp.focus();
+    const submit = async () => {
+      const code = inp.value.replace(/\D/g, '');
+      if (code.length !== 6) { msg.textContent = '请填满 6 位数字'; return; }
+      btn.disabled = true;
+      btn.textContent = '连接中…';
+      msg.textContent = '';
+      try {
+        const ok = await bridgePair(code);
+        if (!ok) { msg.textContent = '配对码不对，看一眼助手窗口里的黄字'; return; }
+        await viewLocal();
+      } catch (e) {
+        msg.textContent = e && e.code === 429
+          ? '试错次数太多，等 1 分钟再试'
+          : '连不上助手，确认那个黑色窗口还开着';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '连接这台电脑';
+      }
+    };
+    btn.onclick = submit;
+    inp.oninput = () => { inp.value = inp.value.replace(/\D/g, '').slice(0, 6); };
+    inp.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
   }
 
   /* ---------- 未连接：引导 ---------- */
@@ -1132,24 +1289,28 @@
         <div class="st">
           <span class="n">1</span>
           <h4>下载助手</h4>
-          <p>点下面的按钮，会下载一个压缩包（两个小文件）。</p>
-          <a class="btn primary sm" href="assistant/心动镜连接助手.zip${SC}" download>${icon('import', 14)} 下载连接助手</a>
-          <div class="tiny muted mt8">解压后双击里面的「启动助手.bat」。打不开压缩包？也可以只下载
-            <a class="link" href="assistant/连接助手.ps1${SC}" download>连接助手.ps1</a>，在它所在的文件夹打开命令行输入下面这行：
+          <p>两个小文件，加起来几十 KB。下到同一个文件夹里。</p>
+          <div class="row" style="gap:8px;flex-wrap:wrap">
+            <a class="btn primary sm" href="assistant/启动助手.bat" download>${icon('import', 14)} 启动助手.bat</a>
+            <a class="btn ghost sm" href="assistant/连接助手.ps1" download>连接助手.ps1</a>
           </div>
-          <div class="code-box mt8">powershell -ExecutionPolicy Bypass -File .\\连接助手.ps1</div>
+          <div class="tiny muted mt8">浏览器可能会把 <code>.bat</code> 当成危险文件拦一下，选「保留」即可。
+            如果只下到了 <code>.ps1</code>，也可以在它所在的文件夹打开命令行输入：
+          </div>
+          <div class="code-box mt8">powershell -ExecutionPolicy Bypass -File .\连接助手.ps1</div>
         </div>
         <div class="st">
           <span class="n">2</span>
           <h4>双击「启动助手.bat」</h4>
-          <p>会弹出一个黑色的窗口，出现「已就绪」和一行地址就说明成功了。</p>
-          <div class="code-box">双击 启动助手.bat<br>看到「本机连接助手 已就绪」</div>
+          <p>会弹出一个黑色窗口，里面有一行黄字「配对码 123456」就说明成功了。</p>
+          <div class="code-box">看到「本机连接助手 已就绪」<br>以及一行 6 位配对码</div>
           <div class="tiny muted mt8">如果 Windows 弹出「已保护你的电脑」，点「更多信息 → 仍要运行」。</div>
         </div>
         <div class="st">
           <span class="n">3</span>
-          <h4>回到这里</h4>
-          <p>第一次连接时，浏览器可能弹出「<b>允许访问你的本地网络</b>」——点【允许】，然后点下面的按钮。</p>
+          <h4>回来输入配对码</h4>
+          <p>点下面按钮重新检测，页面会出现输入框，把窗口里那 6 位数字填进去就接上了。
+            第一次连接时浏览器可能还会问「<b>允许访问你的本地网络</b>」——点【允许】。</p>
           <button class="btn ghost sm" id="bRetry">${icon('refresh', 14)} 我点过了，再检测一次</button>
         </div>
       </div>
@@ -1171,7 +1332,10 @@
         <h3 style="font-size:13.5px;margin-bottom:10px">关于隐私，一句话说清</h3>
         <div class="tiny muted" style="line-height:1.9">
           · 助手只读<b>文件</b>，不改、不删、不上传；所有解析都在你的浏览器里完成。<br>
-          · 它只监听 <code>127.0.0.1</code>，局域网里的其他设备连不上。<br>
+          · 它只监听 <code>127.0.0.1</code>，局域网里别的设备连不进来。<br>
+          · <b>但"只有本机能连"并不等于安全</b>：浏览器本身就能访问 127.0.0.1，所以助手 v2 要求先用窗口里的 6 位配对码换一个随机 Token，
+            之后所有接口都要带这个 Token；并且只接受本应用与 <code>localhost</code> 的网页来源，其他网站发起的请求一律拒绝。<br>
+          · 默认<b>只扫描投递箱</b>这一个文件夹，不会去翻你的桌面和下载目录；想扩大范围要自己加参数启动。<br>
           · 微信 / QQ 的聊天数据库是加密的，任何程序都无法直接读取——助手会检测到并告诉你，你需要用它们自带的「导出」功能生成 txt，放进投递箱，之后就能一键导入。
         </div>
       </div>
@@ -1229,7 +1393,7 @@
         <span class="ac-ico" style="background:#fee2e2;color:#e11d48">${icon('folder', 16)}</span>
         <div style="min-width:0">
           <div class="ac-name">投递箱<i class="dot live"></i></div>
-          <div class="ac-state">${b.contacts.length} 个聊天文件 · ${b.contacts.length} 个联系人</div>
+          <div class="ac-state">${b.contacts.length} 个聊天文件 · ${b.inboxOnly ? '仅扫这一个文件夹' : '含桌面/下载'}</div>
         </div>
       </div>
       <div class="ac-note">丢进去就自动出现，不用每次上传</div>
@@ -1285,9 +1449,11 @@
           </div>
         </div>
         <div class="card-body" id="clist">
-          ${contacts.length ? rows : empty('search', b.contacts.length ? '没有匹配的联系人' : '投递箱还是空的',
-      b.contacts.length ? '换个关键词试试。' : '把导出的聊天记录（txt / json / csv）拖进投递箱文件夹，这里 3 秒内就会自动出现。',
-      `<button class="btn primary" id="bOpenInbox2">打开投递箱</button>`)}
+          ${contacts.length ? rows : (b.contactsErr
+      ? empty('alert', '读取联系人失败', b.contactsErr + '。助手窗口还开着吗？关了窗口就重启一次再试。',
+        `<button class="btn primary" id="bRetryList">重试</button>`)
+      : empty('search', '投递箱还是空的', '把导出的聊天记录（txt / json / csv）拖进投递箱文件夹，这里 3 秒内就会自动出现。',
+        `<button class="btn primary" id="bOpenInbox2">打开投递箱</button>`))}
         </div>
         <div class="card-foot tiny muted">
           为什么看不到微信里的联系人？微信电脑版的聊天数据库是加密的，任何程序都读不了。
@@ -1334,9 +1500,11 @@
       renderLocal();
     };
     $$('#bOpenInbox, #bOpenInbox2').forEach((x) => x.onclick = async () => {
-      try { await bGet('/api/open-inbox', 3000); toast('已在电脑上打开投递箱文件夹'); }
+      try { await bPost('/api/open-inbox', 3000); toast('已在电脑上打开投递箱文件夹'); }
       catch (e) { toast('打开失败，可以手动去：' + (b.inbox || '文档\\心动镜导入'), 'warn'); }
     });
+    const rl = $('#bRetryList');
+    if (rl) rl.onclick = async () => { rl.disabled = true; rl.textContent = '重试中…'; await viewLocal(); };
     const se = $('#bSearch');
     if (se) {
       se.oninput = () => {
@@ -1434,7 +1602,7 @@
       onMount: (wrap, close) => {
         const btn = wrap.querySelector('[data-open-inbox]');
         if (btn) btn.onclick = async () => {
-          try { await bGet('/api/open-inbox', 3000); toast('已打开投递箱'); } catch (e) { toast('打开失败', 'warn'); }
+          try { await bPost('/api/open-inbox', 3000); toast('已打开投递箱'); } catch (e) { toast('打开失败，可以手动去：' + (state.bridge.inbox || '文档\\心动镜导入'), 'warn'); }
           close();
         };
       }
@@ -1561,7 +1729,7 @@
         await loadPartners();
         const { a } = await compute(pid);
         if (!a.empty) {
-          await S.saveReport(state.me.id, pid, a, 'crush');
+          await S.saveReport(state.me.id, pid, a, modeOf(pid));
           await S.updatePartner(state.me.id, pid, { lastAnalysis: a.total });
         }
 
@@ -1612,7 +1780,7 @@
           added += r.added;
           const { a } = await compute(link.pid);
           if (!a.empty) {
-            await S.saveReport(state.me.id, link.pid, a, 'crush');
+            await S.saveReport(state.me.id, link.pid, a, modeOf(link.pid));
             await S.updatePartner(state.me.id, link.pid, { lastAnalysis: a.total });
           }
         }
@@ -1653,7 +1821,8 @@
         const t = new Date(now - d * 86400000);
         t.setHours(9 + Math.floor(rnd() * 13), Math.floor(rnd() * 60), 0, 0);
         const who = rnd() < 0.5 ? name : '我';
-        const bucket = rnd() < temp ? WARM : (rnd() < 0.5 ? NEU : COOL);
+        const roll = rnd();
+        const bucket = roll < temp ? 'warm' : (rnd() < 0.5 ? 'neu' : 'cool');
         const arr = bucket === 'warm' ? WARM : bucket === 'cool' ? COOL : NEU;
         const txt = arr[Math.floor(rnd() * arr.length)];
         blocks.push(who + '\n' + t.getFullYear() + '年' + (t.getMonth() + 1) + '月' + t.getDate() + '日 ' +

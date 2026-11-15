@@ -13,7 +13,10 @@
   let worker = null;
   let loading = null;
 
-  /* ---------- 加载引擎（优先本地，失败回落 CDN，带重试） ---------- */
+  /* ---------- 加载引擎（仅本地自托管，不再回落任何 CDN） ----------
+     早期版本失败会去 CDN 拉 tesseract.min.js，但那等于往一个
+     「能读到全部聊天记录」的页面里动态注入未校验的远程脚本，
+     与「完全本地」的承诺也矛盾，这里直接去掉。 */
   function loadScript(src) {
     return new Promise((resolve, reject) => {
       const s = document.createElement('script');
@@ -28,14 +31,13 @@
     if (root.Tesseract) return;
     if (loading) return loading;
     loading = (async () => {
-      if (onStatus) onStatus('正在加载识别引擎（首次约 9MB，浏览器会缓存）…');
-      try { await loadScript(VENDOR + 'tesseract.min.js'); return; } catch (e) { /* 回落 CDN */ }
-      let err;
-      for (let i = 0; i < 4; i++) {
-        if (onStatus) onStatus(`本地引擎不可用，正在尝试备用线路（第 ${i + 1}/4 次）…`);
-        try { await loadScript(CDN_FALLBACK + '?v=' + Date.now()); return; } catch (e) { err = e; await new Promise((r) => setTimeout(r, 2500)); }
+      if (onStatus) onStatus('正在加载识别引擎（首次约 15MB，浏览器会缓存）…');
+      let err = null;
+      for (let i = 0; i < 2; i++) {
+        try { await loadScript(VENDOR + 'tesseract.min.js'); return; }
+        catch (e) { err = e; await new Promise((r) => setTimeout(r, 1200)); }
       }
-      throw new Error('识别引擎加载失败，请刷新页面重试');
+      throw new Error('识别引擎加载失败（assets/vendor 缺文件或被拦截），请刷新页面重试');
     })();
     return loading;
   }
@@ -63,9 +65,16 @@
      - 自适应减法(mean-C)：彩底被切碎，出现 "CCCmmme" 之类乱码；
      - 背景归一化 g/localMean + 阈值：彩底与白底表现一致 ✔ 采用此方案。 */
   function preprocess(img) {
-    const MAX = 2400; // 长截图也不要把字压小（实测压小后识别率明显下降）
-    const scale = Math.min(3, Math.max(1, MAX / Math.max(img.width, img.height)));
-    const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+    const MAX_SIDE = 2400;      // 长截图也不要把字压小（实测压小后识别率明显下降）
+    const MAX_PIXELS = 4000000; // 但必须封顶：积分图是按像素分配的，2000×10000 会直接吃满内存
+    let scale = Math.min(3, Math.max(1, MAX_SIDE / Math.max(img.width, img.height)));
+    let w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+    if (w * h > MAX_PIXELS) {
+      const k = Math.sqrt(MAX_PIXELS / (w * h));
+      w = Math.max(1, Math.round(w * k));
+      h = Math.max(1, Math.round(h * k));
+      scale = w / img.width;
+    }
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     const ctx = c.getContext('2d');
@@ -85,7 +94,7 @@
       for (let i = 0; i < px.length; i += 4) px[i] = px[i + 1] = px[i + 2] = 255 - px[i];
     }
 
-    // 积分图求局部均值
+    // 积分图求局部均值（像素数已封顶 4e6，Float64 最多约 32MB，可以接受）
     const iw = w + 1;
     const integ = new Float64Array(iw * (h + 1));
     for (let y = 0; y < h; y++) {

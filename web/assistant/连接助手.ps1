@@ -1,29 +1,66 @@
 ﻿# ============================================================
-#  心动镜 · 本机连接助手（Bridge）
+#  心动镜 · 本机连接助手（Bridge）v2
 #  作用：让网页能读到这台电脑上的聊天记录来源
-#  特点：零安装、只监听 127.0.0.1、不上传任何数据
+#  安全模型：随机 Token 鉴权 + 精确 Origin 白名单 + 配对码
+#           只监听 127.0.0.1，默认只扫投递箱，不上传任何数据
 # ============================================================
 #Requires -Version 5.1
 [CmdletBinding()]
 param(
   [int]$Port = 17321,
-  [switch]$Check
+  [switch]$Check,
+  # 只跑路径边界回归测试（不监听端口），用于排查"扫描根目录被同名前缀目录穿透"的问题
+  [switch]$SelfTest,
+  # 显式开启后才会额外扫描 下载 / 桌面 / 文档（默认只扫投递箱）
+  [switch]$ScanUserFolders,
+  # 额外允许的网页来源，例如 -AllowOrigin "https://example.com"
+  [string[]]$AllowOrigin = @()
 )
 
 $ErrorActionPreference = 'Continue'
-$Version = '1.1.0'
+$Version = '2.0.0'
 $UserHome = $env:USERPROFILE
 $Inbox = Join-Path $UserHome 'Documents\心动镜导入'
 $Script:StartedAt = (Get-Date)
 $Script:ReqCount = 0
 
 $TextExt = @('.txt', '.json', '.csv', '.log', '.md')
+
+# ---------- 随机凭据 ----------
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$tb = New-Object byte[] 24
+$rng.GetBytes($tb)
+$Script:Token = -join ($tb | ForEach-Object { $_.ToString('x2') })
+$cb = New-Object byte[] 4
+$rng.GetBytes($cb)
+$Script:PairCode = ([BitConverter]::ToUInt32($cb, 0) % 1000000).ToString('000000')
+
+# ---------- 允许的网页来源 ----------
+$Script:Origins = @('https://crushlens.app.workbuddy.host')
+foreach ($o in $AllowOrigin) {
+  if (-not [string]::IsNullOrWhiteSpace($o)) { $Script:Origins += $o.Trim().TrimEnd('/').ToLower() }
+}
+
+function Test-OriginAllowed([string]$origin) {
+  if ([string]::IsNullOrWhiteSpace($origin)) { return $false }
+  $o = $origin.Trim().TrimEnd('/').ToLower()
+  # 本机开发源（localhost / 127.0.0.1 任意端口）
+  if ($o -match '^https?://(localhost|127\.0\.0\.1)(:\d+)?$') { return $true }
+  foreach ($a in $Script:Origins) { if ($o -eq $a) { return $true } }
+  return $false
+}
+
+# ---------- 扫描范围（默认只扫投递箱） ----------
 $ScanRoots = @(
-  @{ path = $Inbox;                                  depth = 3 },
-  @{ path = (Join-Path $UserHome 'Downloads');       depth = 1 },
-  @{ path = (Join-Path $UserHome 'Desktop');         depth = 1 },
-  @{ path = (Join-Path $UserHome 'Documents');       depth = 1 }
+  @{ path = $Inbox; depth = 3; label = '投递箱' }
 )
+if ($ScanUserFolders) {
+  $ScanRoots += @{ path = (Join-Path $UserHome 'Downloads'); depth = 1; label = '本机文件' }
+  $ScanRoots += @{ path = (Join-Path $UserHome 'Desktop');   depth = 1; label = '本机文件' }
+  $ScanRoots += @{ path = (Join-Path $UserHome 'Documents'); depth = 1; label = '本机文件' }
+}
+
+$Script:IdMap = @{}
 
 # ---------- 初始化 ----------
 if (-not (Test-Path -LiteralPath $Inbox)) {
@@ -33,6 +70,12 @@ if (-not (Test-Path -LiteralPath $Inbox)) {
 function Write-Log($msg, $color = 'Gray') {
   $t = (Get-Date).ToString('HH:mm:ss')
   Write-Host ("  [" + $t + "] " + $msg) -ForegroundColor $color
+}
+
+function Get-FileId([string]$path) {
+  $sha = [System.Security.Cryptography.SHA1]::Create()
+  $h = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($path.ToLower()))
+  return (-join ($h | ForEach-Object { $_.ToString('x2') })).Substring(0, 20)
 }
 
 # ---------- 文本文件判定 ----------
@@ -116,18 +159,20 @@ function Get-ChatFiles {
       $cnt = ([regex]::Matches($txt, $pat)).Count
       if ($cnt -lt 3) { continue }
 
+      # 对外只暴露不可逆 id，不返回任何本机绝对路径
+      $fid = Get-FileId $f.FullName
+      $Script:IdMap[$fid] = $f.FullName
+
       $items += [pscustomobject]@{
-        id       = $f.FullName
+        id       = $fid
         app      = 'files'
         name     = (Get-DisplayName $f)
         platform = $plat
-        source   = if ($f.DirectoryName -eq $Inbox) { '投递箱' } else { '本机文件' }
+        source   = $root.label
         count    = $cnt
         size     = $f.Length
         modified = $f.LastWriteTime.ToString('o')
         mtime    = [int64]($f.LastWriteTime.ToUniversalTime() - [datetime]'1970-01-01').TotalMilliseconds
-        path     = $f.FullName
-        folder   = $f.DirectoryName
       }
     }
   }
@@ -238,18 +283,34 @@ function Get-AppList($running) {
 }
 
 # ---------- 响应 ----------
-function Send-Body($stream, [string]$body, [string]$ctype = 'application/json; charset=utf-8', [int]$code = 200) {
+$StatusText = @{
+  200 = 'OK'; 204 = 'No Content'; 400 = 'Bad Request'; 401 = 'Unauthorized'
+  403 = 'Forbidden'; 404 = 'Not Found'; 405 = 'Method Not Allowed'; 429 = 'Too Many Requests'
+}
+
+function Get-CorsLine([string]$origin) {
+  if (-not (Test-OriginAllowed $origin)) { return @() }
+  return @(
+    "Access-Control-Allow-Origin: $origin",
+    'Vary: Origin',
+    'Access-Control-Allow-Methods: GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers: Content-Type, X-Bridge-Token',
+    'Access-Control-Allow-Private-Network: true',
+    'Access-Control-Max-Age: 600'
+  )
+}
+
+function Send-Body($stream, [string]$body, [string]$ctype = 'application/json; charset=utf-8', [int]$code = 200, [string]$origin = '') {
   $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+  $phrase = $StatusText[$code]
+  if (-not $phrase) { $phrase = 'OK' }
   $sb = New-Object System.Text.StringBuilder
-  [void]$sb.Append("HTTP/1.1 $code OK`r`n")
+  [void]$sb.Append("HTTP/1.1 $code $phrase`r`n")
   [void]$sb.Append("Content-Type: $ctype`r`n")
   [void]$sb.Append("Content-Length: $($bytes.Length)`r`n")
-  [void]$sb.Append("Access-Control-Allow-Origin: *`r`n")
-  [void]$sb.Append("Access-Control-Allow-Methods: GET, POST, OPTIONS`r`n")
-  [void]$sb.Append("Access-Control-Allow-Headers: *`r`n")
-  [void]$sb.Append("Access-Control-Allow-Private-Network: true`r`n")
-  [void]$sb.Append("Access-Control-Max-Age: 600`r`n")
+  foreach ($line in (Get-CorsLine $origin)) { [void]$sb.Append("$line`r`n") }
   [void]$sb.Append("Cache-Control: no-store`r`n")
+  [void]$sb.Append("X-Content-Type-Options: nosniff`r`n")
   [void]$sb.Append("Connection: close`r`n`r`n")
   $head = [System.Text.Encoding]::UTF8.GetBytes($sb.ToString())
   $stream.Write($head, 0, $head.Length)
@@ -257,10 +318,10 @@ function Send-Body($stream, [string]$body, [string]$ctype = 'application/json; c
   $stream.Flush()
 }
 
-function Send-Json($stream, $obj) {
+function Send-Json($stream, $obj, [int]$code = 200, [string]$origin = '') {
   $json = $obj | ConvertTo-Json -Depth 8 -Compress
   if ($null -eq $json) { $json = '{}' }
-  Send-Body $stream $json
+  Send-Body $stream $json 'application/json; charset=utf-8' $code $origin
 }
 
 function Get-Query([string]$target) {
@@ -285,19 +346,71 @@ function Test-AllowedPath([string]$p) {
   $ext = [System.IO.Path]::GetExtension($p).ToLower()
   if ($TextExt -notcontains $ext) { return $false }
   $full = [System.IO.Path]::GetFullPath($p).ToLower()
+  $sep = [System.IO.Path]::DirectorySeparatorChar
   foreach ($r in $ScanRoots) {
     $rf = [System.IO.Path]::GetFullPath($r.path).ToLower()
-    if ($full.StartsWith($rf)) { return $true }
+    # 必须补目录分隔符边界，否则 C:\Users\x\DownloadsEvil\a.txt 会命中 Downloads 根
+    if ($full -eq $rf -or $full.StartsWith($rf + $sep)) { return $true }
   }
   return $false
 }
 
-# ---------- 主循环 ----------
+function Resolve-ChatId([string]$id) {
+  if ([string]::IsNullOrWhiteSpace($id)) { return $null }
+  if (-not $Script:IdMap.ContainsKey($id)) { return $null }
+  $p = $Script:IdMap[$id]
+  if (-not (Test-AllowedPath $p)) { return $null }
+  return $p
+}
+
+# ---------- 路径边界自测 ----------
+if ($SelfTest) {
+  $base = Join-Path $env:TEMP ('clst_' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+  $evil = $base + 'Evil'
+  New-Item -ItemType Directory -Path $base -Force | Out-Null
+  New-Item -ItemType Directory -Path $evil -Force | Out-Null
+  $pIn = Join-Path $base 'ok.txt'
+  $pOut = Join-Path $evil 'bad.txt'
+  $pExt = Join-Path $base 'bad.exe'
+  foreach ($f in @($pIn, $pOut, $pExt)) {
+    Set-Content -LiteralPath $f -Value 'x' -Encoding UTF8
+  }
+  $savedRoots = $ScanRoots
+  $ScanRoots = @(@{ path = $base; depth = 1; label = 'selftest' })
+  $cases = @(
+    @{ name = '根目录内的文本文件应放行'; got = (Test-AllowedPath $pIn);  want = $true },
+    @{ name = '同名前缀的邻目录应拒绝';   got = (Test-AllowedPath $pOut); want = $false },
+    @{ name = '非文本扩展名应拒绝';       got = (Test-AllowedPath $pExt); want = $false },
+    @{ name = '不存在的文件应拒绝';       got = (Test-AllowedPath (Join-Path $base 'none.txt')); want = $false }
+  )
+  $ScanRoots = $savedRoots
+  $fail = 0
+  foreach ($c in $cases) {
+    if ($c.got -eq $c.want) {
+      Write-Host ('  [PASS] ' + $c.name) -ForegroundColor Green
+    } else {
+      $fail++
+      Write-Host ('  [FAIL] ' + $c.name + ' (期望 ' + $c.want + '，实际 ' + $c.got + ')') -ForegroundColor Red
+    }
+  }
+  Remove-Item -LiteralPath $base, $evil -Recurse -Force -ErrorAction SilentlyContinue
+  if ($fail -eq 0) {
+    Write-Host '  selftest=ok' -ForegroundColor Green
+    exit 0
+  }
+  Write-Host ('  selftest=fail (' + $fail + ')') -ForegroundColor Red
+  exit 1
+}
+
+# ---------- 自检 ----------
 if ($Check) {
   $running = Get-RunningNames
   $apps = Get-AppList $running
   $chats = Get-ChatFiles
   Write-Host ('apps=' + $apps.Count + ' chats=' + $chats.Count + ' inbox=' + $Inbox) -ForegroundColor Green
+  Write-Host ('scanRoots=' + ($ScanRoots | ForEach-Object { $_.path }) -join '; ')
+  Write-Host ('origins=' + ($Script:Origins -join ','))
+  Write-Host ('paircode=' + $Script:PairCode)
   exit 0
 }
 
@@ -307,7 +420,7 @@ try {
 } catch {
   Write-Host ''
   Write-Host ('  端口 ' + $Port + ' 被占用了，可能助手已经在运行。') -ForegroundColor Yellow
-  Write-Host ('  你可以直接用：http://127.0.0.1:' + $Port + '/api/hello') -ForegroundColor Yellow
+  Write-Host '  请关掉之前的助手窗口，再重新双击启动。' -ForegroundColor Yellow
   Write-Host ''
   Read-Host '  按回车退出'
   exit 1
@@ -319,17 +432,27 @@ Write-Host '  ┌─────────────────────
 Write-Host '  │        心动镜 · 本机连接助手 已就绪           │' -ForegroundColor Magenta
 Write-Host '  └───────────────────────────────────────────────┘' -ForegroundColor Magenta
 Write-Host ''
+Write-Host ('   配对码    ' + $Script:PairCode) -ForegroundColor Yellow
+Write-Host '             ↑ 回到网页「直连本机」，把这 6 位数字填进去' -ForegroundColor DarkGray
+Write-Host ''
 Write-Host ('   监听地址  http://127.0.0.1:' + $Port) -ForegroundColor Cyan
 Write-Host ('   投递箱    ' + $Inbox) -ForegroundColor Cyan
+if ($ScanUserFolders) {
+  Write-Host '   扫描范围  投递箱 + 下载 / 桌面 / 文档（已显式开启）' -ForegroundColor DarkYellow
+} else {
+  Write-Host '   扫描范围  仅投递箱（想额外扫桌面/下载，加 -ScanUserFolders 启动）' -ForegroundColor DarkGray
+}
 Write-Host ''
-Write-Host '   现在回到浏览器里的「直连本机」页面，会自动连上。' -ForegroundColor Gray
-Write-Host '   关掉这个窗口 = 断开连接。数据不会离开这台电脑。' -ForegroundColor DarkGray
+Write-Host '   配对码只在本次运行有效；关掉窗口即清空，下次启动会换新的。' -ForegroundColor Gray
+Write-Host '   数据不会离开这台电脑。' -ForegroundColor DarkGray
 Write-Host ''
 
 $runningCache = @()
 $runningAt = [datetime]::MinValue
 $chatCache = @()
 $chatAt = [datetime]::MinValue
+$pairFails = 0
+$pairLockUntil = [datetime]::MinValue
 
 $loop = $true
 while ($loop) {
@@ -341,9 +464,17 @@ while ($loop) {
     $sr = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::UTF8, $false, 4096, $true)
     $reqLine = $sr.ReadLine()
     if ([string]::IsNullOrWhiteSpace($reqLine)) { $client.Close(); continue }
+
+    $headers = @{}
     while ($true) {
       $h = $sr.ReadLine()
       if ($null -eq $h -or $h -eq '') { break }
+      $ci = $h.IndexOf(':')
+      if ($ci -gt 0) {
+        $hk = $h.Substring(0, $ci).Trim().ToLower()
+        $hv = $h.Substring($ci + 1).Trim()
+        $headers[$hk] = $hv
+      }
     }
 
     $seg = $reqLine.Split(' ')
@@ -356,87 +487,163 @@ while ($loop) {
     $pathOnly = $pathOnly.TrimEnd('/')
     if ([string]::IsNullOrWhiteSpace($pathOnly)) { $pathOnly = '/' }
 
+    $origin = ''
+    if ($headers.ContainsKey('origin')) { $origin = $headers['origin'] }
+    $originOk = Test-OriginAllowed $origin
+
+    # 预检
     if ($method -eq 'OPTIONS') {
-      Send-Body $stream '' 'text/plain' 204
+      if ($originOk) { Send-Body $stream '' 'text/plain' 204 $origin }
+      else { Send-Body $stream '{"ok":false,"error":"origin not allowed"}' 'application/json; charset=utf-8' 403 '' }
+      $client.Close(); continue
+    }
+
+    # 带 Origin 但不是白名单来源 → 直接拒绝（浏览器侧攻击的主要入口）
+    if (-not [string]::IsNullOrWhiteSpace($origin) -and -not $originOk) {
+      Send-Json $stream ([ordered]@{ ok = $false; error = '来源未授权' }) 403 ''
       $client.Close(); continue
     }
 
     $Script:ReqCount = $Script:ReqCount + 1
 
+    $needToken = $true
+    if ($pathOnly -eq '/api/ping' -or $pathOnly -eq '/api/pair') { $needToken = $false }
+
+    if ($needToken -and $pathOnly.StartsWith('/api/')) {
+      $tk = ''
+      if ($headers.ContainsKey('x-bridge-token')) { $tk = $headers['x-bridge-token'] }
+      if ($tk -ne $Script:Token) {
+        Send-Json $stream ([ordered]@{ ok = $false; error = 'unauthorized' }) 401 $origin
+        $client.Close(); continue
+      }
+    }
+
     switch ($pathOnly) {
-      '/api/hello' {
-        $obj = [ordered]@{
-          ok        = $true
-          version   = $Version
-          host      = $env:COMPUTERNAME
-          user      = $env:USERNAME
-          os        = [System.Environment]::OSVersion.VersionString
-          inbox     = $Inbox
-          startedAt = $Script:StartedAt.ToString('o')
-          uptime    = [int]((Get-Date) - $Script:StartedAt).TotalSeconds
-          requests  = $Script:ReqCount
+      '/api/ping' {
+        Send-Json $stream ([ordered]@{ ok = $true; version = $Version; pair = $true }) 200 $origin
+      }
+      '/api/pair' {
+        if ($method -ne 'POST') {
+          Send-Json $stream ([ordered]@{ ok = $false; error = 'method not allowed' }) 405 $origin
+        } elseif ((Get-Date) -lt $pairLockUntil) {
+          Send-Json $stream ([ordered]@{ ok = $false; error = '尝试过于频繁，请稍后再试' }) 429 $origin
+        } else {
+          $q = Get-Query $target
+          $code = ''
+          if ($q.ContainsKey('code')) { $code = $q['code'] }
+          if ($code -eq $Script:PairCode) {
+            $pairFails = 0
+            Write-Log '网页配对成功' 'Green'
+            Send-Json $stream ([ordered]@{ ok = $true; token = $Script:Token }) 200 $origin
+          } else {
+            $pairFails = $pairFails + 1
+            if ($pairFails -ge 5) {
+              $pairLockUntil = (Get-Date).AddMinutes(1)
+              $pairFails = 0
+              Write-Log '配对码连续输错，锁定 1 分钟' 'Yellow'
+            }
+            Send-Json $stream ([ordered]@{ ok = $false; error = '配对码不对' }) 403 $origin
+          }
         }
-        Send-Json $stream $obj
+      }
+      '/api/hello' {
+        if ($method -ne 'GET') {
+          Send-Json $stream ([ordered]@{ ok = $false; error = 'method not allowed' }) 405 $origin
+        } else {
+          $obj = [ordered]@{
+            ok          = $true
+            version     = $Version
+            host        = $env:COMPUTERNAME
+            user        = $env:USERNAME
+            os          = [System.Environment]::OSVersion.VersionString
+            inbox       = $Inbox
+            scanScope   = if ($ScanUserFolders) { 'inbox+userfolders' } else { 'inbox' }
+            startedAt   = $Script:StartedAt.ToString('o')
+            uptime      = [int]((Get-Date) - $Script:StartedAt).TotalSeconds
+            requests    = $Script:ReqCount
+          }
+          Send-Json $stream $obj 200 $origin
+        }
       }
       '/api/apps' {
-        if (((Get-Date) - $runningAt).TotalSeconds -gt 4) {
-          $runningCache = Get-RunningNames
-          $runningAt = Get-Date
+        if ($method -ne 'GET') {
+          Send-Json $stream ([ordered]@{ ok = $false; error = 'method not allowed' }) 405 $origin
+        } else {
+          if (((Get-Date) - $runningAt).TotalSeconds -gt 4) {
+            $runningCache = Get-RunningNames
+            $runningAt = Get-Date
+          }
+          Send-Json $stream ([ordered]@{ apps = @(Get-AppList $runningCache); at = (Get-Date).ToString('o') }) 200 $origin
         }
-        Send-Json $stream ([ordered]@{ apps = @(Get-AppList $runningCache); at = (Get-Date).ToString('o') })
       }
       '/api/contacts' {
-        if (((Get-Date) - $chatAt).TotalSeconds -gt 8) {
-          $chatCache = Get-ChatFiles
-          $chatAt = Get-Date
+        if ($method -ne 'GET') {
+          Send-Json $stream ([ordered]@{ ok = $false; error = 'method not allowed' }) 405 $origin
+        } else {
+          if (((Get-Date) - $chatAt).TotalSeconds -gt 8) {
+            $chatCache = Get-ChatFiles
+            $chatAt = Get-Date
+          }
+          $q = Get-Query $target
+          $list = $chatCache
+          if ($q.ContainsKey('app') -and $q['app'] -ne 'files' -and $q['app'] -ne '') {
+            $list = @()
+          }
+          Send-Json $stream ([ordered]@{
+              contacts  = @($list)
+              inbox     = $Inbox
+              scannedAt = (Get-Date).ToString('o')
+              inboxOnly = (-not $ScanUserFolders)
+            }) 200 $origin
         }
-        $q = Get-Query $target
-        $list = $chatCache
-        if ($q.ContainsKey('app') -and $q['app'] -ne 'files' -and $q['app'] -ne '') {
-          $list = @()
-        }
-        Send-Json $stream ([ordered]@{
-            contacts  = @($list)
-            inbox     = $Inbox
-            scannedAt = (Get-Date).ToString('o')
-            inboxOnly = $false
-          })
       }
       '/api/messages' {
-        $q = Get-Query $target
-        $id = ''
-        if ($q.ContainsKey('id')) { $id = $q['id'] }
-        if (-not (Test-AllowedPath $id)) {
-          Send-Body $stream '{"ok":false,"error":"文件不存在或不在允许的目录内"}' 'application/json; charset=utf-8' 404
+        if ($method -ne 'GET') {
+          Send-Json $stream ([ordered]@{ ok = $false; error = 'method not allowed' }) 405 $origin
         } else {
-          $txt = ''
-          try { $txt = [System.IO.File]::ReadAllText($id, [System.Text.Encoding]::UTF8) } catch {
-            try { $txt = [System.IO.File]::ReadAllText($id, [System.Text.Encoding]::GetEncoding('GB18030')) } catch { }
+          $q = Get-Query $target
+          $id = ''
+          if ($q.ContainsKey('id')) { $id = $q['id'] }
+          $file = Resolve-ChatId $id
+          if ($null -eq $file) {
+            Send-Json $stream ([ordered]@{ ok = $false; error = '文件不存在或不在允许的目录内' }) 404 $origin
+          } else {
+            $txt = ''
+            try { $txt = [System.IO.File]::ReadAllText($file, [System.Text.Encoding]::UTF8) } catch {
+              try { $txt = [System.IO.File]::ReadAllText($file, [System.Text.Encoding]::GetEncoding('GB18030')) } catch { }
+            }
+            $fi = Get-Item -LiteralPath $file
+            Send-Json $stream ([ordered]@{
+                ok       = $true
+                text     = $txt
+                name     = (Get-DisplayName $fi)
+                size     = $fi.Length
+                modified = $fi.LastWriteTime.ToString('o')
+              }) 200 $origin
           }
-          $fi = Get-Item -LiteralPath $id
-          Send-Json $stream ([ordered]@{
-              ok       = $true
-              text     = $txt
-              name     = (Get-DisplayName $fi)
-              path     = $id
-              size     = $fi.Length
-              modified = $fi.LastWriteTime.ToString('o')
-            })
         }
       }
       '/api/open-inbox' {
-        try { Start-Process explorer.exe -ArgumentList ('"' + $Inbox + '"') } catch { }
-        Send-Json $stream ([ordered]@{ ok = $true; inbox = $Inbox })
+        if ($method -ne 'POST') {
+          Send-Json $stream ([ordered]@{ ok = $false; error = 'method not allowed' }) 405 $origin
+        } else {
+          try { Start-Process explorer.exe -ArgumentList ('"' + $Inbox + '"') } catch { }
+          Send-Json $stream ([ordered]@{ ok = $true; inbox = $Inbox }) 200 $origin
+        }
       }
       '/api/shutdown' {
-        Send-Json $stream ([ordered]@{ ok = $true })
-        $loop = $false
+        if ($method -ne 'POST') {
+          Send-Json $stream ([ordered]@{ ok = $false; error = 'method not allowed' }) 405 $origin
+        } else {
+          Send-Json $stream ([ordered]@{ ok = $true }) 200 $origin
+          $loop = $false
+        }
       }
       '/' {
-        Send-Body $stream 'CrushLens Bridge OK' 'text/plain; charset=utf-8' 200
+        Send-Body $stream 'CrushLens Bridge OK' 'text/plain; charset=utf-8' 200 $origin
       }
       default {
-        Send-Body $stream '{"ok":false,"error":"not found"}' 'application/json; charset=utf-8' 404
+        Send-Json $stream ([ordered]@{ ok = $false; error = 'not found' }) 404 $origin
       }
     }
   } catch {

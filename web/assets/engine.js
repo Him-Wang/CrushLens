@@ -472,34 +472,42 @@
       });
     }
 
-    // 缺失日插值（只在缺口 <= 5 天时），超出则视为断联
+    // 缺失日插值（只在缺口 <= 5 天时），超出则视为断联。
+    // 注意：必须单遍构建，缺口日先以 score=null 入列，遇到下一个活跃日再回填，
+    // 否则同一天会被 push 两次（曾出现 daily 55 条 / 实际 38 天的重复与日期非单调）。
     const daily = [];
-    let lastIdx = -1;
+    let lastActiveIdx = -1;
     raw.forEach((p, idx) => {
-      if (p.active) {
-        if (lastIdx >= 0 && idx - lastIdx > 1 && idx - lastIdx <= 6) {
-          const a = raw[lastIdx].score, b = p.score;
-          for (let j = lastIdx + 1; j < idx; j++) {
-            const t = (j - lastIdx) / (idx - lastIdx);
-            daily.push({ ...raw[j], score: Math.round((a + (b - a) * t) * 10) / 10, interp: true });
-          }
-        }
-        daily.push(p);
-        lastIdx = idx;
-      } else {
-        daily.push(p);
+      if (!p.active) {
+        daily.push({ date: p.date, count: 0, active: false, score: null, interp: false });
+        return;
       }
+      const gap = lastActiveIdx >= 0 ? idx - lastActiveIdx - 1 : 0;
+      if (gap > 0 && gap <= 5) {
+        const a = raw[lastActiveIdx].score, b = p.score;
+        for (let j = 1; j <= gap; j++) {
+          const node = daily[daily.length - gap + j - 1];
+          if (!node || node.active) continue;
+          const t = j / (gap + 1);
+          node.score = Math.round((a + (b - a) * t) * 10) / 10;
+          node.interp = true;
+        }
+      }
+      daily.push({ ...p, interp: false });
+      lastActiveIdx = idx;
     });
 
     const activePoints = daily.filter((d) => d.active || d.interp);
     const scores = activePoints.map((d) => d.score);
+    const realDays = daily.filter((d) => d.active).length;
 
-    // 只保留最近 90 天作为展示
+    // 内部叙事 / 转折点只看最近 90 天窗口；对外仍返回完整序列，
+    // 保证 daily.length === spanDays、日期严格单调递增，图表再按区间切片。
     const viewDaily = daily.slice(-90);
 
-    // 7 日均线
-    const ma = viewDaily.map((d, i) => {
-      const win = viewDaily.slice(Math.max(0, i - 6), i + 1).filter((x) => x.score != null);
+    // 7 日均线（与 daily 等长、逐下标对齐）
+    const ma = daily.map((d, i) => {
+      const win = daily.slice(Math.max(0, i - 6), i + 1).filter((x) => x.score != null);
       if (!win.length) return null;
       return Math.round(win.reduce((a, b) => a + b.score, 0) / win.length * 10) / 10;
     });
@@ -519,27 +527,36 @@
     let momentum = avg7 - avgPrev7;
     if (scores.length < 4) momentum = slope * 3;
 
-    // 预测未来 7 天
+    // 预测未来 7 天：真实对话日少于 3 天时不给预测。
+    // 单条消息也算出「未来 7 天 + 置信区间」是假精确，比不给结论更糟。
     const forecast = [];
-    for (let k = 1; k <= 7; k++) {
-      const damp = Math.pow(0.78, k - 1 < 0 ? 0 : k - 1);
-      const drift = slope * k * damp;
-      const revert = (54 - lastScore) * 0.09 * k;
-      const v = clamp(lastScore + drift + revert, 6, 97);
-      const band = 4.5 + 2.4 * k;
-      forecast.push({
-        date: dayKey(addDays(new Date(viewDaily[viewDaily.length - 1].date + 'T00:00:00'), k)),
-        score: Math.round(v * 10) / 10,
-        lo: Math.round(clamp(v - band, 3, 99) * 10) / 10,
-        hi: Math.round(clamp(v + band, 3, 99) * 10) / 10
-      });
+    const canForecast = realDays >= 3;
+    if (canForecast) {
+      for (let k = 1; k <= 7; k++) {
+        const damp = Math.pow(0.78, k - 1 < 0 ? 0 : k - 1);
+        const drift = slope * k * damp;
+        const revert = (54 - lastScore) * 0.09 * k;
+        const v = clamp(lastScore + drift + revert, 6, 97);
+        const band = 4.5 + 2.4 * k;
+        forecast.push({
+          date: dayKey(addDays(new Date(viewDaily[viewDaily.length - 1].date + 'T00:00:00'), k)),
+          score: Math.round(v * 10) / 10,
+          lo: Math.round(clamp(v - band, 3, 99) * 10) / 10,
+          hi: Math.round(clamp(v + band, 3, 99) * 10) / 10
+        });
+      }
     }
 
-    // 转折点
+    // 转折点：只认真实观测日，两侧各至少 2 个活跃日；
+    // 缺口日（score=null）与插值日都不参与，避免把「没聊天」误读成「降温」。
     const points = [];
-    for (let i = 3; i < viewDaily.length; i++) {
-      const before = mean(viewDaily.slice(Math.max(0, i - 3), i).map((x) => x.score).filter((x) => x != null));
-      const after = mean(viewDaily.slice(i, i + 3).map((x) => x.score).filter((x) => x != null));
+    for (let i = 2; i < viewDaily.length; i++) {
+      if (!viewDaily[i].active) continue;
+      const left = viewDaily.slice(Math.max(0, i - 3), i).filter((x) => x.active);
+      const right = viewDaily.slice(i, i + 3).filter((x) => x.active);
+      if (left.length < 2 || right.length < 2) continue;
+      const before = mean(left.map((x) => x.score));
+      const after = mean(right.map((x) => x.score));
       if (before == null || after == null) continue;
       const diff = after - before;
       if (Math.abs(diff) >= 9 && (points.length === 0 || i - points[points.length - 1].i >= 4)) {
@@ -579,7 +596,9 @@
       firstDay: dayKey(firstDay),
       lastDay: dayKey(lastDay),
       spanDays,
-      daily: viewDaily,
+      realDays,
+      canForecast,
+      daily,
       ma,
       score: lastScore,
       avg7: Math.round(avg7 * 10) / 10,
@@ -603,7 +622,9 @@
     for (let i = 0; i < n; i++) { num += (xs[i] - mx) * (ys[i] - my); den += (xs[i] - mx) ** 2; }
     return den === 0 ? 0 : num / den;
   }
-  function mean(a) { return a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0; }
+  // 空数组必须返回 null（而不是 0）：否则「缺口日」会被当成 0 分参与均值，
+  // 制造出 −58 分这类并不存在的断崖转折。
+  function mean(a) { return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; }
   function sum(a) { return a.reduce((x, y) => x + y, 0); }
 
   function buildReview(ctx) {
@@ -699,7 +720,7 @@
 
     const dir = momentum > 1.5 ? '上行' : momentum < -1.5 ? '下行' : '横盘';
     const sorted = Object.entries(dims).sort((a, b) => b[1] - a[1]);
-    const lastF = forecast[forecast.length - 1];
+    const lastF = forecast.length ? forecast[forecast.length - 1] : null;
 
     const paras = [];
     paras.push(
@@ -724,11 +745,15 @@
       );
     }
 
-    paras.push(
-      '按当前斜率外推，7 天后浓度大致落在 **' + Math.round(lastF.score) + '** 附近（区间 ' +
-      Math.round(lastF.lo) + '–' + Math.round(lastF.hi) + '）。这是趋势外推，不是预言；' +
-      '如果中间出现一次长对话或一次冷处理，曲线会明显偏离。'
-    );
+    if (lastF) {
+      paras.push(
+        '按当前斜率外推，7 天后浓度大致落在 **' + Math.round(lastF.score) + '** 附近（区间 ' +
+        Math.round(lastF.lo) + '–' + Math.round(lastF.hi) + '）。这是趋势外推，不是预言；' +
+        '如果中间出现一次长对话或一次冷处理，曲线会明显偏离。'
+      );
+    } else {
+      paras.push('当前真实对话日不足 3 天，暂不做 7 天外推——样本这么薄时给出的「预测区间」没有参考价值，多聊几天再看趋势。');
+    }
 
     const advice = [];
     if (dims['行动'] < 50) advice.push('「行动」偏低：把聊天里出现过的具体提议（见面/一起做什么）落地一次，比继续加话题更能提浓度。');

@@ -66,7 +66,12 @@
   const add = (store, val) => run(store, 'readwrite', (s) => wrap(s.add(val)));
   const del = (store, key) => run(store, 'readwrite', (s) => wrap(s.delete(key)));
 
-  /* ---------------- 密码哈希 ---------------- */
+  /* ---------------- 密码哈希 ----------------
+     只用 PBKDF2。绝不静默降级成非加密哈希：
+     crypto.subtle 在非安全上下文（file:// 双击、手机访问 http://192.168.x.x）不存在，
+     一旦降级，同一个库里会混存两种算法，换到 localhost 打开就再也登不进自己的账号。 */
+  const PW_ALG = 'pbkdf2-sha256-60000';
+
   function bufToHex(buf) {
     return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
   }
@@ -80,17 +85,24 @@
     crypto.getRandomValues(a);
     return bufToHex(a);
   }
-  async function hashPw(pw, saltHex) {
-    try {
-      const enc = new TextEncoder();
-      const key = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveBits']);
-      const bits = await crypto.subtle.deriveBits(
-        { name: 'PBKDF2', salt: hexToBuf(saltHex), iterations: 60000, hash: 'SHA-256' }, key, 256
-      );
-      return bufToHex(bits);
-    } catch (e) {
-      return E.hash(saltHex + '|' + pw + '|crushlens');
+  function hasSubtle() {
+    try { return !!(root.crypto && root.crypto.subtle && root.crypto.subtle.importKey); }
+    catch (e) { return false; }
+  }
+  function assertSecureContext() {
+    if (!hasSubtle()) {
+      throw new Error('当前打开方式不支持安全加密（缺少 WebCrypto）。请用 http://localhost 或 https 地址打开，不要直接双击 html 文件。');
     }
+  }
+
+  async function hashPw(pw, saltHex) {
+    assertSecureContext();
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt: hexToBuf(saltHex), iterations: 60000, hash: 'SHA-256' }, key, 256
+    );
+    return bufToHex(bits);
   }
 
   /* ---------------- 会话 ---------------- */
@@ -113,14 +125,15 @@
     const o = opts || {};
     email = String(email || '').trim().toLowerCase();
     name = String(name || '').trim() || email.split('@')[0];
-    if (!/^[^\s@]+@[^\s@]+$/.test(email)) throw new Error('邮箱格式不对，检查一下');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('邮箱格式不对，检查一下');
     if (String(password || '').length < 6) throw new Error('密码至少 6 位');
+    assertSecureContext();
     const all = await getAll('accounts');
     if (all.some((a) => a.email === email)) throw new Error('这个邮箱已经注册过了，直接登录吧');
 
     const salt = randHex(16);
     const acc = {
-      email, name, salt, pw: await hashPw(password, salt),
+      email, name, salt, pw: await hashPw(password, salt), pwAlg: PW_ALG,
       createdAt: Date.now(), lastLogin: Date.now(), loginCount: 1,
       isDeveloper: !!o.developer
     };
@@ -135,6 +148,10 @@
     const all = await getAll('accounts');
     const acc = all.find((a) => a.email === email);
     if (!acc) throw new Error('没有找到这个账号，先注册一个');
+    // 老账号没有算法标记说明是早期弱哈希，明确提示而不是给出「密码不对」
+    if (acc.pwAlg !== PW_ALG) {
+      throw new Error('这个账号是旧版本创建的，密码校验方式已升级，无法登录。请用同一个邮箱重新注册。');
+    }
     const h = await hashPw(password, acc.salt);
     if (h !== acc.pw) throw new Error('密码不对');
     acc.lastLogin = Date.now();
@@ -197,7 +214,7 @@
     if (owner && owner === acc.id) return { level: 'owner', permanent: true, expiresAt: null };
     const rows = await grantsOf(acc.id);
     const active = rows.find((g) => g.status === 'active' && (!g.expiresAt || g.expiresAt > Date.now()));
-    if (active) return { level: active.level === 'owner' ? 'dev' : 'dev', permanent: false, expiresAt: active.expiresAt, grant: active };
+    if (active) return { level: 'dev', permanent: false, expiresAt: active.expiresAt, grant: active };
     const pending = (await getAll('requests', 'uid', acc.id)).find((r) => r.status === 'pending');
     if (pending) return { level: 'pending', permanent: false };
     return { level: 'user', permanent: false };
@@ -207,10 +224,14 @@
     const all = await getAll('accounts');
     const target = all.find((a) => a.email === String(email || '').trim().toLowerCase());
     if (!target) throw new Error('这个邮箱还没有注册过账号，让对方先注册再来申请');
+    // 时长必须校验：NaN / 负数 / 超大值会写出 expiresAt: NaN，让授权状态不可预测
+    let h = Number(hours);
+    if (!isFinite(h) || h <= 0) h = 24;
+    h = Math.min(168, Math.max(1, Math.round(h)));
     const g = {
       uid: target.id, email: target.email, name: target.name,
       level: 'dev', status: 'active', grantedBy: ownerAcc.id,
-      grantedAt: Date.now(), expiresAt: Date.now() + hours * 3600 * 1000,
+      grantedAt: Date.now(), expiresAt: Date.now() + h * 3600 * 1000,
       note: note || ''
     };
     g.id = await add('grants', g);
@@ -220,7 +241,7 @@
       r.status = 'approved'; r.decidedAt = Date.now(); r.decidedBy = ownerAcc.id; r.grantId = g.id;
       await put('requests', r);
     }
-    await log(ownerAcc.id, 'grant_issue', target.email, { hours, grantId: g.id });
+    await log(ownerAcc.id, 'grant_issue', target.email, { hours: h, grantId: g.id });
     return g;
   }
 
@@ -270,6 +291,8 @@
     const p = {
       uid, name: data.name, platform: data.platform || 'paste',
       mode: data.mode || 'crush', note: data.note || '',
+      // 记住「哪个说话人是我」，否则 compute() 里 me=null，主动/回应两个维度会退化成 50 基线
+      meSpeaker: data.meSpeaker || null,
       color: data.color || pickColor(data.name),
       createdAt: Date.now(), msgCount: 0, firstMsgAt: null, lastMsgAt: null, lastImportAt: null
     };
@@ -433,7 +456,13 @@
       const bs = batches.filter((b) => b.uid === a.id);
       const g = grants.find((x) => x.uid === a.id && x.status === 'active' && (!x.expiresAt || x.expiresAt > Date.now()));
       return {
-        ...a,
+        // 白名单字段：绝不把 salt / pw / pwAlg 这类凭据摊给 UI 层
+        id: a.id,
+        email: a.email,
+        name: a.name,
+        createdAt: a.createdAt,
+        lastLogin: a.lastLogin,
+        loginCount: a.loginCount,
         partnerCount: ps.length,
         msgCount: ms.length,
         batchCount: bs.length,
@@ -552,9 +581,8 @@
     for (const p of ps) await deletePartner(uid, p.id);
     const rs = await getAll('reports', 'uid', uid);
     for (const r of rs) await del('reports', r.id);
-    const as = await getAll('audit', 'uid', uid);
-    for (const a of as) await del('audit', a.id);
-    await log(uid, 'wipe_account', '', {});
+    // 审计记录只增不删：清号本身也留痕，否则「全量审计」就自相矛盾
+    await log(uid, 'wipe_account', '', { partners: ps.length, reports: rs.length });
   }
 
   root.Store = {

@@ -83,7 +83,11 @@
   function gateSetup() {
     showGate(`
       <h2>初始化总开发者</h2>
-      <p>这个应用还没有总开发者。第一个认领的账号将获得<b>永久最高权限</b>，之后不可转让、不可撤销。</p>
+      <p>这个应用还没有总开发者。第一个认领的账号会成为<b>这台设备上的</b>总开发者，之后不能转让。</p>
+      <div class="bridge-warn" style="margin:16px 0 4px">
+        ${icon('alert', 14)} 说明：当前版本没有服务端，监管台只能看到<b>同一个浏览器</b>里注册过的账号。
+        换一台设备、换一个浏览器就是另一份独立数据。
+      </div>
       <div class="perm-card big" style="margin:22px 0">
         <div class="pi">${icon('shield', 18)}</div>
         <div>
@@ -160,7 +164,7 @@
     $('#app').hidden = false;
     $('#meName').textContent = state.me.name;
     $('#meAvatar').textContent = String(state.me.name || '?').slice(0, 1);
-    $('#meRole').textContent = state.role.level === 'owner' ? '总开发者 · 永久' : '授权开发者';
+    $('#meRole').textContent = state.role.level === 'owner' ? '总开发者 · 本机唯一' : '授权开发者';
     $('#logoutBtn').onclick = async () => {
       if (!(await confirmDlg({ title: '退出开发端', text: '只是退出登录，不会删除任何数据。', okText: '退出' }))) return;
       S.logout(); location.reload();
@@ -209,13 +213,17 @@
   }
 
   function banner() {
+    // 数据范围必须写清楚：没有服务端时，"监管所有用户"只在同一浏览器内成立
+    const scope = `<div class="mask-hint" style="margin-bottom:12px">${icon('alert', 13)}
+      <span>数据源：当前浏览器的本地数据库（IndexedDB）。这里只统计<b>在本机这个浏览器里</b>注册过的账号，
+      不含其他设备上的用户。</span></div>`;
     if (state.role.level === 'owner') {
-      return `<div class="perm-banner owner"><span class="pi">${icon('shield', 15)}</span>
-        <div><b>总开发者权限 · 永久有效。</b> 可查看全部使用记录与聊天内容，可发放/撤销他人权限。</div></div>`;
+      return scope + `<div class="perm-banner owner"><span class="pi">${icon('shield', 15)}</span>
+        <div><b>总开发者（本机唯一）。</b> 可查看本机的使用记录与聊天内容，可发放/撤销他人权限。</div></div>`;
     }
     const left = state.role.expiresAt ? Math.max(0, state.role.expiresAt - Date.now()) : 0;
     const hrs = Math.floor(left / 3600000), mins = Math.floor((left % 3600000) / 60000);
-    return `<div class="perm-banner"><span class="pi">${icon('clock', 15)}</span>
+    return scope + `<div class="perm-banner"><span class="pi">${icon('clock', 15)}</span>
       <div><b>限时权限，剩余 ${hrs} 小时 ${mins} 分。</b> 到期自动失效，需再次向总开发者申请。聊天内容调阅仅对总开发者开放。</div></div>`;
   }
 
