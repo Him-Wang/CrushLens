@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>心动镜 · 开发端监管台</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%234338ca'/><path d='M50 24l6 16 16 6-16 6-6 16-6-16-16-6 16-6z' fill='white'/></svg>">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="admin">
+
+<!-- ============ 权限门 ============ -->
+<div id="gate" class="auth-shell" hidden>
+  <div class="auth-visual">
+    <div>
+      <div class="brand" style="padding:0">
+        <div class="brand-mark">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>
+          </svg>
+        </div>
+        <div class="brand-txt">
+          <strong style="color:#1e1b4b">心动镜</strong>
+          <span style="color:#4338ca">CONSOLE · 监管台</span>
+        </div>
+      </div>
+
+      <div class="auth-hero">
+        <h1>开发端<br>只对授权者开放</h1>
+        <p>这里能看到所有用户的使用记录：导入了多少段对话、来自哪个平台、使用频率，以及需要时调阅聊天内容做合规核查。</p>
+      </div>
+
+      <div class="auth-feats">
+        <div class="auth-feat">
+          <span class="fi"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg></span>
+          <div><b>总开发者 · 永久权限</b>唯一超级账号，不可被撤销、不可被替代</div>
+        </div>
+        <div class="auth-feat">
+          <span class="fi"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg></span>
+          <div><b>被分享者 · 按时申请</b>授权到期自动失效，需要再次向总开发者申请</div>
+        </div>
+        <div class="auth-feat">
+          <span class="fi"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4h16v16H4zM8 9h8M8 13h5"/></svg></span>
+          <div><b>全量审计</b>谁在什么时候看了什么，都会留痕</div>
+        </div>
+      </div>
+    </div>
+    <div class="auth-foot">监管操作会被记录 · 聊天内容仅总开发者可调阅</div>
+  </div>
+
+  <div class="auth-form-side">
+    <div class="auth-card" id="gateCard"></div>
+  </div>
+</div>
+
+<!-- ============ 控制台 ============ -->
+<div id="app" class="app" hidden>
+  <div class="mobile-bar">
+    <button class="icon-btn" id="sideToggle" aria-label="菜单">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <strong>监管台</strong>
+  </div>
+
+  <aside class="side" id="side">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>
+        </svg>
+      </div>
+      <div class="brand-txt">
+        <strong>监管台</strong>
+        <span>CONSOLE · 仅授权者</span>
+      </div>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-sec"><span>快捷</span></div>
+    <div class="plist" id="quick" style="flex:0"></div>
+    <div style="flex:1"></div>
+    <div class="side-foot">
+      <div class="userchip">
+        <span class="avatar" id="meAvatar" style="width:32px;height:32px;font-size:13px;background:#e0e7ff;color:#4338ca"></span>
+        <div style="min-width:0">
+          <div class="u-name" id="meName">—</div>
+          <div class="u-role" id="meRole">—</div>
+        </div>
+        <button class="icon-btn" id="logoutBtn" title="退出">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4m7 14 5-5-5-5m5 5H9"/></svg>
+        </button>
+      </div>
+      <a href="index.html" class="tiny muted" style="display:block;text-align:center;margin-top:9px;text-decoration:underline">回到用户端 →</a>
+    </div>
+  </aside>
+
+  <main class="main" id="main"></main>
+</div>
+
+<script src="assets/engine.js"></script>
+<script src="assets/store.js"></script>
+<script src="assets/ui.js"></script>
+<script src="assets/admin.js"></script>
+</body>
+</html>
