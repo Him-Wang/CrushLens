@@ -986,8 +986,11 @@
           const p = await S.createPartner(state.me.id, { name: targetName, platform, mode, note, meSpeaker });
           pid = p.id;
         }
-        state.pid = pid;
       }
+
+      // 导入目标（新建或合并进已有对象）一律成为当前对象，
+      // 否则「查看趋势」会把用户带回导入前选中的那个人
+      state.pid = pid;
 
       // 标记「这一份正在写」，概览据此显示骨架而不是「没有可分析的消息」
       state.importingPid = pid;
