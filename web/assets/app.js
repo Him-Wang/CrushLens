@@ -181,7 +181,7 @@
       renderPartnerList();
       if (state.view === 'overview' || state.view === 'partner') await goto('overview');
       else if (state.view === 'realtime') await goto('realtime');
-      $('#side').classList.remove('open');
+      // 窄屏抽屉的收起交给 sideDrawer 的 [data-pid] 委托（经 close()，会还原焦点与遮罩）
     });
   }
 
