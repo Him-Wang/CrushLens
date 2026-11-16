@@ -1,0 +1,59 @@
+name: Deploy web/ to GitHub Pages
+
+# 发布方式：Pages 的 source 设为 "GitHub Actions"，把仓库 web/ 目录当作站点根发布。
+# 站点地址：https://<owner>.github.io/<repo>/
+# 根目录的 legacy/index.html（旧版网页版）不参与发布。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: 语法检查与单元测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 语法检查（web/assets/*.js）
+        run: |
+          set -e
+          for f in web/assets/*.js; do
+            echo "node --check $f"
+            node --check "$f"
+          done
+      - name: 引擎与存储单元测试
+        run: |
+          node web/tests/engine.test.js
+          node web/tests/store.test.js
+
+  deploy:
+    name: 发布 web/ 到 Pages
+    needs: verify
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4

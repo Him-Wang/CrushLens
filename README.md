@@ -1,7 +1,7 @@
 # CrushLens 心动镜 · v1.2
 
 > 本地优先的聊天好感度分析工具。一个绿色、便携的 Windows exe，不需要安装，不写注册表，不上传聊天到任何 CrushLens 服务器。
-> **网页版（在线，免安装）**：[https://him-wang.github.io/CrushLens/](https://him-wang.github.io/CrushLens/) — 同一套分析在浏览器里跑，聊天只在本机解析；也可以下 [v1.3.0 Release](https://github.com/Him-Wang/CrushLens/releases/tag/v1.3.0) 里的 `CrushLens-web-1.3.0.zip` 本地打开。
+> **网页版（在线，免安装）**：[https://him-wang.github.io/CrushLens/](https://him-wang.github.io/CrushLens/) — 线上是新的 Web 版（账号 / 追踪对象 / 直连本机助手），源码在 [`web/`](web/)，由 GitHub Actions 发布（见 [`web/README.md`](web/README.md)）。旧版单文件网页版（v1.3，自带 API Key）留在 [`legacy/index.html`](legacy/index.html)，仍可双击打开，也可以下 [v1.3.0 Release](https://github.com/Him-Wang/CrushLens/releases/tag/v1.3.0) 里的 `CrushLens-web-1.3.0.zip`。
 
 
 ![分析台](screenshots/analysis.png)
@@ -251,6 +251,8 @@ MIT。详见 [LICENSE](LICENSE)。
 - **直连本机**：`web/assistant/` 提供零依赖本机连接助手，扫描本机聊天记录文件、按联系人聚合、一键导入、20 秒自动同步
 - 所有分析在浏览器本地完成，数据保存在 IndexedDB，不上传服务器
 
-启动方式：进入 `web` 目录用任意静态服务器打开即可（例如 `python -m http.server 8080`），浏览器访问 `http://localhost:8080`。
+启动方式：本地开发用任意静态服务器打开 `web` 目录即可（例如 `cd web && python -m http.server 8080`，浏览器访问 `http://localhost:8080`）。
+
+线上不用手动发布：`.github/workflows/pages.yml` 会在 `main` 上 `web/**` 有改动时，先跑 `node --check` 与 `web/tests/` 里的单元测试，再把 `web/` 作为站点根发布到 GitHub Pages。注意 Pages 的 source 必须是 **GitHub Actions**（不是「Deploy from a branch」），否则 `web/` 只会待在仓库根以外的子路径里、打开站点看到的仍是旧入口。旧版网页版已移到 [`legacy/index.html`](legacy/index.html)，不参与发布。
 
 详细功能说明、目录结构与隐私说明见 [web/README.md](web/README.md)。
