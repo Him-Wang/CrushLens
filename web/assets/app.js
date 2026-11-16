@@ -5,7 +5,7 @@
   'use strict';
   const { $, $$, esc, icon, toast, modal, confirmDlg, trendChart, sparkline,
     gauge, radar, donut, bars, avatar, empty, fmtDate, fmtDateFull, fmtDT,
-    relTime, fmtNum, chipTrend, scoreClass, el } = UI;
+    relTime, fmtNum, chipTrend, scoreClass, el, sideDrawer } = UI;
   const S = Store, E = CLEngine;
 
   const MEDIA_RE = /\[(图片|表情|语音|视频|文件|动画表情|链接|位置|红包|转账|名片|聊天记录|小程序|视频号|音乐|拍一拍)\]/g;
@@ -89,7 +89,7 @@
     };
 
     $('#addPartnerBtn').onclick = () => newPartnerDialog();
-    $('#sideToggle').onclick = () => $('#side').classList.toggle('open');
+    sideDrawer({ side: '#side', toggle: '#sideToggle' });
 
     await loadPartners();
     state.bridge.links = loadLinks();

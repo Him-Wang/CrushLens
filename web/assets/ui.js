@@ -456,8 +456,82 @@
     return 'cool';
   }
 
+  /* ---------------- 窄屏侧栏抽屉 ----------------
+     980px 以下侧栏是 fixed 抽屉：必须有遮罩挡住正文的误触，
+     并且支持 × / 遮罩 / Esc 三种收起方式，打开时锁滚动、关掉后焦点还给汉堡按钮。 */
+  function sideDrawer(opts) {
+    const side = document.querySelector(opts.side);
+    const toggle = document.querySelector(opts.toggle);
+    if (!side || !toggle) return { open() { }, close() { }, isOpen: () => false };
+
+    const bd = document.createElement('div');
+    bd.className = 'side-backdrop';
+    bd.hidden = true;
+    document.body.appendChild(bd);
+
+    const mq = window.matchMedia('(max-width: 980px)');
+    let lastFocus = null;
+    let hideTimer = null;
+
+    const isOpen = () => side.classList.contains('open');
+
+    function open() {
+      if (!mq.matches || isOpen()) return;
+      lastFocus = document.activeElement;
+      side.classList.add('open');
+      toggle.setAttribute('aria-expanded', 'true');
+      bd.hidden = false;
+      // 下一帧再加 show，保证 opacity 过渡生效
+      requestAnimationFrame(() => bd.classList.add('show'));
+      document.body.classList.add('side-locked');
+      const first = side.querySelector('[data-side-close], button, a, [tabindex]');
+      if (first) { try { first.focus({ preventScroll: true }); } catch (e) { first.focus(); } }
+    }
+
+    function close() {
+      if (!isOpen()) return;
+      side.classList.remove('open');
+      toggle.setAttribute('aria-expanded', 'false');
+      bd.classList.remove('show');
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => { if (!isOpen()) bd.hidden = true; }, 260);
+      document.body.classList.remove('side-locked');
+      if (lastFocus && document.contains(lastFocus) && lastFocus.focus) {
+        try { lastFocus.focus({ preventScroll: true }); } catch (e) { /* 元素已不在，忽略 */ }
+      }
+    }
+
+    toggle.setAttribute('aria-controls', side.id || 'side');
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.onclick = () => { if (isOpen()) close(); else open(); };
+
+    // 点遮罩收起
+    bd.onclick = close;
+    // × 收起；在抽屉里点了导航/对象也收起（和移动端习惯一致）
+    side.addEventListener('click', (e) => {
+      if (e.target.closest('[data-side-close]') || e.target.closest('[data-nav]') || e.target.closest('[data-pid]')) close();
+    });
+    // Esc 收起
+    document.addEventListener('keydown', (e) => {
+      if ((e.key === 'Escape' || e.key === 'Esc') && isOpen()) { e.stopPropagation(); close(); }
+    });
+    // 拉宽回桌面尺寸时把状态清干净
+    const onChange = (ev) => {
+      if (ev.matches) return;
+      side.classList.remove('open');
+      bd.classList.remove('show');
+      bd.hidden = true;
+      toggle.setAttribute('aria-expanded', 'false');
+      document.body.classList.remove('side-locked');
+    };
+    if (mq.addEventListener) mq.addEventListener('change', onChange);
+    else if (mq.addListener) mq.addListener(onChange);
+
+    return { open, close, isOpen };
+  }
+
   root.UI = {
-    $, $$, esc, el, icon, toast, modal, confirmDlg,
+    $, $$, esc, el, icon, toast, modal, confirmDlg, sideDrawer,
     trendChart, sparkline, gauge, radar, donut, bars, avatar, empty,
     fmtDate, fmtDateFull, fmtDT, relTime, fmtNum, chipTrend, scoreClass
   };

@@ -6,7 +6,7 @@
 (function () {
   'use strict';
   const { $, $$, esc, icon, toast, modal, confirmDlg, donut, bars, avatar,
-    empty, fmtDate, fmtDateFull, fmtDT, relTime, fmtNum } = UI;
+    empty, fmtDate, fmtDateFull, fmtDT, relTime, fmtNum, sideDrawer } = UI;
   const S = Store, E = CLEngine;
 
   const state = { me: null, role: null, view: 'dash', owner: null, search: '' };
@@ -169,7 +169,7 @@
       if (!(await confirmDlg({ title: '退出开发端', text: '只是退出登录，不会删除任何数据。', okText: '退出' }))) return;
       S.logout(); location.reload();
     };
-    $('#sideToggle').onclick = () => $('#side').classList.toggle('open');
+    sideDrawer({ side: '#side', toggle: '#sideToggle' });
     S.log(state.me.id, 'console_open', '', { role: state.role.level });
     renderNav();
     goto('dash');
