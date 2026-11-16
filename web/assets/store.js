@@ -110,10 +110,24 @@
     localStorage.setItem(SESSION_KEY, JSON.stringify({ uid, at: Date.now() }));
   }
   function clearSession() { localStorage.removeItem(SESSION_KEY); }
+
+  // 会话有效期：7 天。共用电脑上「上次登录的人永远登不出去」是安全问题。
+  const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
+  let sessionExpired = false;
+
   function sessionUid() {
-    try { const s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); return s && s.uid; }
-    catch (e) { return null; }
+    try {
+      const s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+      if (!s || !s.uid) return null;
+      if (s.at && (Date.now() - s.at) > SESSION_TTL) {
+        sessionExpired = true;
+        localStorage.removeItem(SESSION_KEY);
+        return null;
+      }
+      return s.uid;
+    } catch (e) { return null; }
   }
+  function wasSessionExpired() { return sessionExpired; }
 
   /* ---------------- 审计 ---------------- */
   async function log(uid, action, target, meta) {
@@ -617,14 +631,31 @@
     await log(uid, 'wipe_account', '', { partners: ps.length, reports: rs.length });
   }
 
+  // 只清本机聊天数据，保留账号与审计日志（退出登录时的可选项）
+  async function clearChatData(uid) {
+    const ps = await listPartners(uid);
+    let msgs = 0;
+    for (const p of ps) {
+      const m = await getAll('messages', 'pid', p.id);
+      msgs += m.length;
+      for (const x of m) await del('messages', x.id);
+      for (const b of await getAll('batches', 'pid', p.id)) await del('batches', b.id);
+      for (const r of await getAll('reports', 'pid', p.id)) await del('reports', r.id);
+      await del('partners', p.id);
+    }
+    await log(uid, 'clear_chat_data', '', { partners: ps.length, msgs });
+    broadcast('messages-changed', { pid: null, added: 0 });
+    return { partners: ps.length, msgs };
+  }
+
   root.Store = {
-    signup, login, logout, current, sessionUid,
+    signup, login, logout, current, sessionUid, wasSessionExpired,
     roleOf, ownerUid, claimOwner, grantsOf, issueGrant, revokeGrant,
     requestAccess, decideRequest,
     listPartners, findPartnerByName, createPartner, updatePartner, deletePartner,
     importMessages, messagesOf, batchesOf, saveReport, reportsOf,
     adminOverview, adminUserRows, log,
-    broadcast, onBroadcast, seedDemo, wipeAccount,
+    broadcast, onBroadcast, seedDemo, wipeAccount, clearChatData,
     getMeta, setMeta, pickColor,
     raw: { getAll, getOne, put, add, del }
   };

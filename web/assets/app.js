@@ -34,6 +34,9 @@
     $('#auth').hidden = false;
     $('#app').hidden = true;
     let mode = 'login';
+    if (S.wasSessionExpired && S.wasSessionExpired()) {
+      $('#authSub').textContent = '登录已过期（7 天未使用）。重新登录，之前的数据还在。';
+    }
 
     $$('.auth-tabs button').forEach((b) => {
       b.onclick = () => {
@@ -82,8 +85,17 @@
       state.role.level === 'dev' ? '授权开发者' : '普通用户';
 
     $('#logoutBtn').onclick = async () => {
-      const ok = await confirmDlg({ title: '退出登录', text: '数据仍然保存在本机，下次登录还能看到。', okText: '退出' });
+      const ok = await confirmDlg({ title: '退出登录', text: '数据仍然保存在本机，下次登录还能看到。共用电脑的话，下一步可以顺手清掉本机聊天记录。', okText: '继续' });
       if (!ok) return;
+      const clear = await confirmDlg({
+        title: '要一并清除本机聊天数据吗？',
+        text: '清除后，这台电脑上的追踪对象、聊天记录和分析报告都会删除（账号保留），无法恢复。只是换个人用的话，选「保留数据」。',
+        okText: '清除并退出',
+        danger: true
+      });
+      if (clear) {
+        try { await S.clearChatData(state.me.id); } catch (e) { /* 清失败也别把退出卡住 */ }
+      }
       stopRealtime();
       S.logout();
       location.reload();

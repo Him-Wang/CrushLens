@@ -169,6 +169,24 @@ function loadStore(subtleOn) {
   ok((await S2.findPartnerByName(acc.id, '陈屿')) === null, '没有同名对象时返回 null');
   ok((await S2.findPartnerByName(acc.id, '')) === null, '空名字返回 null（不会误命中）');
 
+  /* ---------------- 4. 会话过期 ---------------- */
+  section('4. 会话 7 天过期');
+  const KEY = 'crushlens_session_v1';
+  globalThis.localStorage.setItem(KEY, JSON.stringify({ uid: acc.id, at: Date.now() - 8 * 24 * 3600 * 1000 }));
+  ok((await S2.current()) === null, '8 天前的会话不再自动登录');
+  ok(S2.wasSessionExpired() === true, 'wasSessionExpired() 能告诉 UI 这次是过期而不是首次打开');
+  ok(globalThis.localStorage.getItem(KEY) === null, '过期会话已从 localStorage 清掉');
+  globalThis.localStorage.setItem(KEY, JSON.stringify({ uid: acc.id, at: Date.now() }));
+  ok(!!(await S2.current()), '7 天内的会话仍然有效');
+
+  /* ---------------- 5. 只清聊天数据 ---------------- */
+  section('5. clearChatData（保留账号）');
+  const beforeN = (await S2.listPartners(acc.id)).length;
+  const cleared = await S2.clearChatData(acc.id);
+  ok(beforeN > 0 && (await S2.listPartners(acc.id)).length === 0, '追踪对象已清空（清前 ' + beforeN + ' 个）');
+  ok(cleared.partners === beforeN, '返回被清理的对象数');
+  ok(!!(await S2.current()), '账号仍然保留，可以重新登录');
+
   console.log('\n────────────────────────────────────────────');
   console.log('结果：' + pass + ' 通过 / ' + fail + ' 失败');
   process.exit(fail === 0 ? 0 : 1);
