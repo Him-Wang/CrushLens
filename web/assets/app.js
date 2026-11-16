@@ -13,6 +13,7 @@
   const state = {
     me: null, role: null, partners: [], pid: null,
     view: 'overview', range: 30, timer: null, lastRt: null, parsed: null,
+    importingPid: null,
     bridge: {
       ok: false, needPair: false, info: null, error: null, contactsErr: null,
       apps: [], contacts: [], inboxOnly: true,
@@ -187,7 +188,12 @@
   }
 
   async function compute(pid) {
-    const partner = state.partners.find((p) => p.id === pid);
+    let partner = state.partners.find((p) => p.id === pid);
+    if (!partner) {
+      // 刚导入/刚创建的对象可能还没进内存列表，先刷新一次再算
+      await loadPartners();
+      partner = state.partners.find((p) => p.id === pid);
+    }
     const rows = await S.messagesOf(pid);
     const a = E.analyze(toRows(rows), { me: partner && partner.meSpeaker });
     return { a, partner, rows };
@@ -254,13 +260,35 @@
     }
 
     const { a, partner } = await compute(pid);
-    if (a.empty) {
-      $('#main').innerHTML = head('概览', esc(partner.name)) +
+    if (!partner || a.empty) {
+      /* 区分「真的没有消息」和「消息还在写 / 对象刚建好」：
+         partner 缺失或 msgCount > 0 说明库里其实有东西，只是这次读到的快照还没就绪，
+         这时给骨架屏并自动重试，而不是直接甩一句「没有可分析的消息」。 */
+      const name = partner ? partner.name : '这个对象';
+      const writing = !partner || state.importingPid === pid || (partner.msgCount || 0) > 0;
+      state.ovEmptyTry = state.ovEmptyTry || {};
+      const tries = state.ovEmptyTry[pid] || 0;
+      if (writing && tries < 2) {
+        state.ovEmptyTry[pid] = tries + 1;
+        $('#main').innerHTML = head(`正在看 ${esc(name)}`, '消息刚写进来，正在整理…') +
+          `<div class="card pad center">
+            <div class="skl-line"></div>
+            <div class="skl-line" style="width:70%"></div>
+            <div class="skl-block"></div>
+            <p class="muted small">消息正在写入并计算曲线，稍等一下就好…</p>
+          </div>`;
+        setTimeout(() => {
+          if (state.view === 'overview' && state.pid === pid) viewOverview();
+        }, 600);
+        return;
+      }
+      $('#main').innerHTML = head('概览', esc(name)) +
         `<div class="card">${empty('chart', '这段记录里没有可分析的消息', '可能是格式没被识别，或者只有系统消息。',
           `<button class="btn primary" data-go="import">重新导入</button>`)}</div>`;
       bindGo();
       return;
     }
+    if (state.ovEmptyTry) delete state.ovEmptyTry[pid];
 
     if (partner.lastAnalysis !== a.total) {
       await S.updatePartner(state.me.id, pid, { lastAnalysis: a.total }).catch(() => { });
@@ -876,6 +904,7 @@
     if (!parsed) return;
     const btn = $('#confirmImport');
     btn.disabled = true; btn.textContent = '正在写入…';
+    const prevImporting = state.importingPid;
 
     // 进度反馈：写入按批刷新；切到后台会提示可能被浏览器暂停
     const pwrap = document.createElement('div');
@@ -947,6 +976,9 @@
         state.pid = pid;
       }
 
+      // 标记「这一份正在写」，概览据此显示骨架而不是「没有可分析的消息」
+      state.importingPid = pid;
+
       const res = await S.importMessages(state.me.id, pid, parsed, {
         source: parsed.detected || parsed.platform,
         fileName: state.fileName || (parsed.fileName || null)
@@ -987,6 +1019,7 @@
       btn.disabled = false; btn.textContent = '重试导入';
       if (pwrap && pwrap.parentNode) pwrap.parentNode.removeChild(pwrap);
     } finally {
+      state.importingPid = prevImporting;
       document.removeEventListener('visibilitychange', onHide);
     }
   }
