@@ -36,7 +36,9 @@ $rng.GetBytes($cb)
 $Script:PairCode = ([BitConverter]::ToUInt32($cb, 0) % 1000000).ToString('000000')
 
 # ---------- 允许的网页来源 ----------
-$Script:Origins = @('https://crushlens.app.workbuddy.host')
+# 线上站点：GitHub Pages 把 web/ 发布到站点根（见 .github/workflows/pages.yml），
+# 所以来源是 https://<用户名>.github.io。换自定义域名时在这里同步改。
+$Script:Origins = @('https://him-wang.github.io')
 foreach ($o in $AllowOrigin) {
   if (-not [string]::IsNullOrWhiteSpace($o)) { $Script:Origins += $o.Trim().TrimEnd('/').ToLower() }
 }
@@ -385,10 +387,10 @@ if ($SelfTest) {
   )
   # Origin 白名单：任意第三方页面必须被拒
   $ocases = @(
-    @{ name = '白名单来源应放行';           got = (Test-OriginAllowed 'https://crushlens.app.workbuddy.host'); want = $true },
+    @{ name = '白名单来源应放行';           got = (Test-OriginAllowed 'https://him-wang.github.io'); want = $true },
     @{ name = '本机开发来源应放行';         got = (Test-OriginAllowed 'http://localhost:5500');                want = $true },
     @{ name = '任意第三方来源应拒绝';       got = (Test-OriginAllowed 'https://evil.example.com');             want = $false },
-    @{ name = '伪装同名的来源应拒绝';       got = (Test-OriginAllowed 'https://crushlens.app.workbuddy.host.evil.io'); want = $false },
+    @{ name = '伪装同名的来源应拒绝';       got = (Test-OriginAllowed 'https://him-wang.github.io.evil.io'); want = $false },
     @{ name = '缺少 Origin 的请求应拒绝';   got = (Test-OriginAllowed '');                                     want = $false }
   )
   $ScanRoots = $savedRoots
