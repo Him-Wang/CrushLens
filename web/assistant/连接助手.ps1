@@ -383,9 +383,17 @@ if ($SelfTest) {
     @{ name = '非文本扩展名应拒绝';       got = (Test-AllowedPath $pExt); want = $false },
     @{ name = '不存在的文件应拒绝';       got = (Test-AllowedPath (Join-Path $base 'none.txt')); want = $false }
   )
+  # Origin 白名单：任意第三方页面必须被拒
+  $ocases = @(
+    @{ name = '白名单来源应放行';           got = (Test-OriginAllowed 'https://crushlens.app.workbuddy.host'); want = $true },
+    @{ name = '本机开发来源应放行';         got = (Test-OriginAllowed 'http://localhost:5500');                want = $true },
+    @{ name = '任意第三方来源应拒绝';       got = (Test-OriginAllowed 'https://evil.example.com');             want = $false },
+    @{ name = '伪装同名的来源应拒绝';       got = (Test-OriginAllowed 'https://crushlens.app.workbuddy.host.evil.io'); want = $false },
+    @{ name = '缺少 Origin 的请求应拒绝';   got = (Test-OriginAllowed '');                                     want = $false }
+  )
   $ScanRoots = $savedRoots
   $fail = 0
-  foreach ($c in $cases) {
+  foreach ($c in ($cases + $ocases)) {
     if ($c.got -eq $c.want) {
       Write-Host ('  [PASS] ' + $c.name) -ForegroundColor Green
     } else {
