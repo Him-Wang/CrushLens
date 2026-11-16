@@ -169,6 +169,17 @@ function loadStore(subtleOn) {
   ok((await S2.findPartnerByName(acc.id, '陈屿')) === null, '没有同名对象时返回 null');
   ok((await S2.findPartnerByName(acc.id, '')) === null, '空名字返回 null（不会误命中）');
 
+  /* ---------------- 3b. findPartnersByName 返回全部同名 ---------------- */
+  section('3b. findPartnersByName（复数）');
+  await S2.createPartner(acc.id, { name: '苏禾', platform: 'wechat' });
+  await S2.createPartner(acc.id, { name: '苏禾', platform: 'qq' });
+  const multi = await S2.findPartnersByName(acc.id, '苏禾');
+  ok(multi.length === 2, '两个不同平台的「苏禾」都被返回（' + multi.length + ' 个）');
+  ok(multi.every((x) => x.name === '苏禾'), '返回的都是同名对象');
+  ok(new Set(multi.map((x) => x.platform)).size === 2, '两个平台都能区分出来');
+  ok((await S2.findPartnersByName(acc.id, '陈屿')).length === 0, '没有同名时返回空数组');
+  ok((await S2.findPartnerByName(acc.id, '苏禾')).name === '苏禾', '单数版仍返回其中一个（兼容旧调用）');
+
   /* ---------------- 4. 会话过期 ---------------- */
   section('4. 会话 7 天过期');
   const KEY = 'crushlens_session_v1';

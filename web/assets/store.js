@@ -312,12 +312,19 @@
     return rows.sort((a, b) => (b.lastMsgAt || b.createdAt) - (a.lastMsgAt || a.createdAt));
   }
 
-  // 按名字找已有对象（不看平台：同一个人换了端导入，也应该并入同一个对象）
-  async function findPartnerByName(uid, name) {
+  // 按名字找已有对象（不看平台：同一个人换了端导入，也应该并入同一个对象）。
+  // 返回全部同名：两个不同的人恰好同名时，调用方要把平台列出来让用户挑，
+  // 不能闷头并进第一个。
+  async function findPartnersByName(uid, name) {
     const want = String(name || '').trim().toLowerCase();
-    if (!want) return null;
+    if (!want) return [];
     const rows = await getAll('partners', 'uid', uid);
-    return rows.find((p) => String(p.name || '').trim().toLowerCase() === want) || null;
+    return rows.filter((p) => String(p.name || '').trim().toLowerCase() === want);
+  }
+
+  async function findPartnerByName(uid, name) {
+    const all = await findPartnersByName(uid, name);
+    return all[0] || null;
   }
 
   async function createPartner(uid, data) {
@@ -663,7 +670,7 @@
     signup, login, logout, current, sessionUid, wasSessionExpired,
     roleOf, ownerUid, claimOwner, grantsOf, issueGrant, revokeGrant,
     requestAccess, decideRequest,
-    listPartners, findPartnerByName, createPartner, updatePartner, deletePartner,
+    listPartners, findPartnerByName, findPartnersByName, createPartner, updatePartner, deletePartner,
     importMessages, messagesOf, batchesOf, saveReport, reportsOf,
     adminOverview, adminUserRows, log,
     broadcast, onBroadcast, seedDemo, wipeAccount, clearChatData,

@@ -834,7 +834,10 @@
 
     /* 归属确认：先看有没有同名对象，再看当前选中的是不是同一个人。
        以前这里直接用 state.pid，选中林晚却导陈屿的记录会静默混进林晚档案。 */
-    const sameName = await S.findPartnerByName(state.me.id, otherName);
+    const sameNames = await S.findPartnersByName(state.me.id, otherName);
+    // 同名可能有多个（不同平台 / 不同的人）：默认目标优先同平台那个，其余照旧列在下拉里
+    const platNorm = String(platform || '').toLowerCase();
+    const sameName = sameNames.find((p) => String(p.platform || '').toLowerCase() === platNorm) || sameNames[0] || null;
     const current = state.partners.find((p) => p.id === state.pid) || null;
     const currentIsSame = !!(current && normName(current.name) === normName(otherName));
     const mismatch = current && !currentIsSame ? current : null;
@@ -907,8 +910,8 @@
       const v = tsel.value;
       if (v === 'new') {
         hint.className = 'hint';
-        hint.innerHTML = sameName && defaultPid !== 'new'
-          ? `已存在同名对象《${esc(sameName.name)}》，建议直接合并；选「新建」会另开一份。`
+        hint.innerHTML = sameNames.length && defaultPid !== 'new'
+          ? `已存在 ${sameNames.length} 个同名对象（${sameNames.map((x) => esc((E.PLATFORM_META[x.platform] || {}).label || x.platform)).join('、')}），建议直接合并；选「新建」会另开一份。`
           : `将新建一个对象「${esc(otherName)}」，平台记为 ${esc(plat.label)}。`;
         return;
       }
@@ -984,11 +987,14 @@
         await S.updatePartner(state.me.id, pid, { meSpeaker }).catch(() => { });
       } else {
         // 「新建」也要再查一次同名，避免同一份记录被导成第二个同名对象
-        const existed = await S.findPartnerByName(state.me.id, targetName);
-        if (existed) {
+        const existeds = await S.findPartnersByName(state.me.id, targetName);
+        if (existeds.length) {
+          const platNorm2 = String(platform || '').toLowerCase();
+          const existed = existeds.find((x) => String(x.platform || '').toLowerCase() === platNorm2) || existeds[0];
+          const desc = existeds.map((x) => `《${targetName} · ${(E.PLATFORM_META[x.platform] || {}).label || x.platform} · ${fmtNum(x.msgCount || 0)} 条》`).join('、');
           const goOn = await confirmDlg({
             title: `已经有「${targetName}」了`,
-            text: `列表里已经有《${targetName} · ${fmtNum(existed.msgCount || 0)} 条》。继续新建会出现两个同名对象，曲线各算各的。要不要合并到已有的那个？`,
+            text: `列表里已有 ${desc}。继续新建会出现两个同名对象，曲线各算各的。要不要合并到${existeds.length > 1 ? '同平台的那个' : '已有的那个'}？`,
             okText: '合并到已有'
           });
           if (goOn) {
