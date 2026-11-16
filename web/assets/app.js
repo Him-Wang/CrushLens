@@ -216,6 +216,33 @@
   }
 
   /* ================= 概览 ================= */
+  // 概览页内的对象切换器：让它跟侧栏一样能选人，切换后侧栏同步高亮
+  function ovSwitch(pid) {
+    if (state.partners.length < 2) return '';
+    return `<div class="ov-switch" role="tablist" aria-label="切换追踪对象">
+      ${state.partners.map((p) => {
+      const c = p.color || S.pickColor(p.name);
+      const on = p.id === pid;
+      return `<button class="ov-chip ${on ? 'active' : ''}" role="tab" aria-selected="${on}" data-switch="${p.id}"
+          title="切换到 ${esc(p.name)}">
+          ${avatar(p.name, c, 24)}
+          <span class="nm">${esc(p.name)}</span>
+          <span class="ct">${fmtNum(p.msgCount || 0)} 条</span>
+        </button>`;
+    }).join('')}
+    </div>`;
+  }
+
+  async function switchPartner(pid) {
+    if (!pid || pid === state.pid) return;
+    state.pid = pid;
+    renderPartnerList();            // 侧栏同步高亮
+    await goto('overview');
+    const main = $('#main');
+    main.classList.add('ov-enter'); // 给一个轻微的淡入，确认「已经换了」
+    setTimeout(() => main.classList.remove('ov-enter'), 420);
+  }
+
   async function viewOverview() {
     const pid = state.pid;
     if (!pid) {
@@ -251,10 +278,12 @@
 
     const html = `
       ${head(
-      `你好，${esc(state.me.name)}`,
-      `今天 ${fmtDateFull(Date.now())} · 正在追踪 ${state.partners.length} 段对话`,
+      `正在看 ${esc(partner.name)}`,
+      `今天 ${fmtDateFull(Date.now())} · ${esc((E.PLATFORM_META[partner.platform] || {}).label || partner.platform)} · ${fmtNum(a.count)} 条消息 · 共 ${state.partners.length} 段对话`,
       `<button class="btn ghost sm" data-go="import">${icon('plus', 14)} 导入新记录</button>`
     )}
+
+      ${ovSwitch(pid)}
 
       <div class="grid g4 mb16">
         ${kpi('当前情感浓度', Math.round(a.total), '', `最近 ${a.spanDays} 天 · ${a.count} 条消息`, spark)}
@@ -368,6 +397,7 @@
         height: 300
       }));
     }
+    $$('[data-switch]').forEach((b) => b.onclick = () => switchPartner(+b.dataset.switch));
     $$('[data-range]').forEach((b) => b.onclick = () => {
       state.range = +b.dataset.range;
       viewOverview();
