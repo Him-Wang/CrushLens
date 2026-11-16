@@ -877,6 +877,30 @@
     const btn = $('#confirmImport');
     btn.disabled = true; btn.textContent = '正在写入…';
 
+    // 进度反馈：写入按批刷新；切到后台会提示可能被浏览器暂停
+    const pwrap = document.createElement('div');
+    pwrap.className = 'prog-wrap mt12';
+    pwrap.setAttribute('data-import-progress', '');
+    pwrap.innerHTML = `<div class="prog"><div class="prog-bar" id="impBar" style="width:2%"></div></div>
+      <div class="tiny muted mt8" id="impText">准备写入 0 / ${parsed.messages.length} 条</div>`;
+    btn.parentNode.insertBefore(pwrap, btn);
+    const pbar = pwrap.querySelector('#impBar');
+    const ptext = pwrap.querySelector('#impText');
+    const setP = (info) => {
+      if (!info) return;
+      const pct = info.total ? Math.max(2, Math.round((info.written / info.total) * 100)) : 100;
+      pbar.style.width = pct + '%';
+      ptext.textContent = `正在写入 ${info.written} / ${info.total} 条`;
+    };
+    let warnedHidden = false;
+    const onHide = () => {
+      if (document.hidden && !warnedHidden) {
+        warnedHidden = true;
+        toast('导入还没结束，先别切到后台，浏览器可能会暂停写入', 'warn');
+      }
+    };
+    document.addEventListener('visibilitychange', onHide);
+
     try {
       const meSpeaker = $('#meSelect') ? $('#meSelect').value : null;
       const targetName = (pendingTarget && pendingTarget.name) || parsed.speakers.find((s) => s !== meSpeaker) || '未命名对象';
@@ -926,9 +950,11 @@
       const res = await S.importMessages(state.me.id, pid, parsed, {
         source: parsed.detected || parsed.platform,
         fileName: state.fileName || (parsed.fileName || null)
-      });
+      }, setP);
 
       await loadPartners();
+      ptext.textContent = '正在计算曲线与复盘…';
+      pbar.style.width = '100%';
       const { a } = await compute(pid);
       if (!a.empty) {
         await S.saveReport(state.me.id, pid, a, modeOf(pid));
@@ -959,6 +985,9 @@
       console.error(err);
       toast(err.message || '导入失败', 'error');
       btn.disabled = false; btn.textContent = '重试导入';
+      if (pwrap && pwrap.parentNode) pwrap.parentNode.removeChild(pwrap);
+    } finally {
+      document.removeEventListener('visibilitychange', onHide);
     }
   }
 

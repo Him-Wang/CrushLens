@@ -332,7 +332,24 @@
   }
 
   /* ---------------- 消息导入（增量去重） ---------------- */
-  async function importMessages(uid, pid, parsed, meta) {
+  // 每 500 条一个事务：原来一条消息一个事务，1 万条要开 1 万次事务，手机上直接卡死
+  const IMPORT_BATCH = 500;
+
+  function bulkPut(rows) {
+    return db().then((d) => new Promise((resolve, reject) => {
+      if (!rows.length) { resolve(0); return; }
+      const t = d.transaction('messages', 'readwrite');
+      const s = t.objectStore('messages');
+      try {
+        for (const r of rows) s.put(r);
+      } catch (err) { reject(err); return; }
+      t.oncomplete = () => resolve(rows.length);
+      t.onerror = () => reject(t.error || new Error('写入失败'));
+      t.onabort = () => reject(t.error || new Error('写入被中断'));
+    }));
+  }
+
+  async function importMessages(uid, pid, parsed, meta, onProgress) {
     const partner = await getOne('partners', pid);
     if (!partner) throw new Error('追踪对象不存在');
     const existing = await getAll('messages', 'pid', pid);
@@ -349,9 +366,16 @@
       added++;
     }
 
-    for (const row of toAdd) await add('messages', row);
+    // 攒批写入，每批回报一次进度（已写 / 本次总数）
+    let written = 0;
+    if (onProgress) { try { onProgress({ written: 0, total: toAdd.length }); } catch (e) { } }
+    for (let i = 0; i < toAdd.length; i += IMPORT_BATCH) {
+      const slice = toAdd.slice(i, i + IMPORT_BATCH);
+      await bulkPut(slice);
+      written += slice.length;
+      if (onProgress) { try { onProgress({ written, total: toAdd.length }); } catch (e) { } }
+    }
 
-    const all = existing.concat(toAdd.map((r, i) => ({ ...r, id: 'tmp' + i })));
     const times = toAdd.map((r) => r.ts);
     const firstAt = Math.min(partner.firstMsgAt || Infinity, ...(times.length ? times : [Infinity]));
     const lastAt = Math.max(partner.lastMsgAt || 0, ...(times.length ? times : [0]));
