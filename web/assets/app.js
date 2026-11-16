@@ -736,6 +736,10 @@
   }
 
   let pendingParse = null;
+  // 本次解析出的「对方是谁 / 平台」，导入时以它为准，不再隐式取当前选中对象
+  let pendingTarget = null;
+
+  const normName = (s) => String(s || '').trim().toLowerCase();
 
   /* 解码：BOM 优先，UTF-8 失败回退 GB18030。
      中文 Windows 上 QQ / 微信导出的 txt 很多是 GBK，直接按 UTF-8 读会整篇乱码。 */
@@ -753,7 +757,7 @@
     return utf8;
   }
 
-  function doParse(text, fileName) {
+  async function doParse(text, fileName) {
     const raw = text != null ? text : ($('#pasteArea') ? $('#pasteArea').value : '');
     if (!raw || raw.trim().length < 8) { toast('内容太短了，先粘一段完整的聊天记录', 'warn'); return; }
 
@@ -767,6 +771,26 @@
     const plat = E.PLATFORM_META[parsed.detected] || E.PLATFORM_META.unknown;
     const first = parsed.messages[0].time, last = parsed.messages[parsed.messages.length - 1].time;
     const speakers = parsed.speakers;
+    const meDefault = speakers.find((s) => /^(我|me|self)$/i.test(s)) || speakers[0];
+    const otherName = speakers.find((s) => s !== meDefault) || '未命名对象';
+    const platform = parsed.detected || parsed.platform;
+
+    /* 归属确认：先看有没有同名对象，再看当前选中的是不是同一个人。
+       以前这里直接用 state.pid，选中林晚却导陈屿的记录会静默混进林晚档案。 */
+    const sameName = await S.findPartnerByName(state.me.id, otherName);
+    const current = state.partners.find((p) => p.id === state.pid) || null;
+    const currentIsSame = !!(current && normName(current.name) === normName(otherName));
+    const mismatch = current && !currentIsSame ? current : null;
+    const defaultPid = sameName ? sameName.id : (currentIsSame ? current.id : 'new');
+    pendingTarget = { name: otherName, platform, mismatchName: mismatch ? mismatch.name : null };
+
+    const targetOpts = [
+      `<option value="new" ${defaultPid === 'new' ? 'selected' : ''}>＋ 新建对象「${esc(otherName)}」</option>`,
+      ...state.partners.map((p) => {
+        const hit = normName(p.name) === normName(otherName);
+        return `<option value="${p.id}" ${p.id === defaultPid ? 'selected' : ''}>${esc(p.name)}（${esc((E.PLATFORM_META[p.platform] || {}).label || p.platform)} · ${fmtNum(p.msgCount || 0)} 条）${hit ? ' · 同名合并' : ''}</option>`;
+      })
+    ].join('');
 
     const body = `
       <div class="parse-summary">
@@ -776,6 +800,17 @@
         <span><b>${parsed.messages.length}</b> 条消息</span>
         <span><b>${speakers.length}</b> 个说话人</span>
         ${first ? `<span class="muted">${fmtDateFull(first)} → ${fmtDateFull(last)}</span>` : ''}
+      </div>
+
+      ${mismatch ? `<div class="warn-box" id="targetWarn">
+        ⚠ 你当前选中的是「${esc(mismatch.name)}」，但这份记录里的对方是「${esc(otherName)}」。
+        已自动把导入目标改为「${esc(otherName)}」，<b>不会</b>写进「${esc(mismatch.name)}」的档案。
+      </div>` : ''}
+
+      <div class="field">
+        <label>导入到哪个对象</label>
+        <select class="select" id="targetSelect">${targetOpts}</select>
+        <div class="hint" id="targetHint"></div>
       </div>
 
       <div class="field">
@@ -808,6 +843,31 @@
     `;
     $('#previewBody').innerHTML = body;
     $('#confirmImport').onclick = () => runImport();
+
+    const tsel = $('#targetSelect');
+    const hint = $('#targetHint');
+    const refreshHint = () => {
+      const v = tsel.value;
+      if (v === 'new') {
+        hint.className = 'hint';
+        hint.innerHTML = sameName && defaultPid !== 'new'
+          ? `已存在同名对象《${esc(sameName.name)}》，建议直接合并；选「新建」会另开一份。`
+          : `将新建一个对象「${esc(otherName)}」，平台记为 ${esc(plat.label)}。`;
+        return;
+      }
+      const p = state.partners.find((x) => x.id === +v);
+      if (!p) { hint.textContent = ''; return; }
+      if (normName(p.name) !== normName(otherName)) {
+        hint.className = 'hint warn';
+        hint.innerHTML = `这份记录的对方是「${esc(otherName)}」，导进「${esc(p.name)}」会把两个人混在一起。`;
+      } else {
+        hint.className = 'hint';
+        hint.innerHTML = `已存在《${esc(p.name)} · ${fmtNum(p.msgCount || 0)} 条》，本次只补新消息，重复的会自动跳过。`;
+      }
+    };
+    tsel.onchange = refreshHint;
+    refreshHint();
+
     $('#previewCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -818,18 +878,49 @@
     btn.disabled = true; btn.textContent = '正在写入…';
 
     try {
-      let pid = state.pid;
       const meSpeaker = $('#meSelect') ? $('#meSelect').value : null;
+      const targetName = (pendingTarget && pendingTarget.name) || parsed.speakers.find((s) => s !== meSpeaker) || '未命名对象';
+      const platform = (pendingTarget && pendingTarget.platform) || parsed.platform || 'paste';
+      const tsel = $('#targetSelect');
+      const chosen = tsel ? tsel.value : 'new';
+      let pid = chosen === 'new' ? null : +chosen;
 
-      if (!pid) {
-        const name = ($('#newPName') && $('#newPName').value.trim()) || parsed.speakers.find((s) => s !== meSpeaker) || '未命名对象';
-        const mode = ($('#newPMode') && $('#newPMode').value) || 'crush';
-        const note = ($('#newPNote') && $('#newPNote').value.trim()) || '';
-        const p = await S.createPartner(state.me.id, { name, platform: parsed.platform, mode, note, meSpeaker });
-        pid = p.id;
-        state.pid = pid;
-      } else {
+      if (pid) {
+        // 用户手动把别人的记录导进当前档案 → 必须再确认一次
+        const tp = state.partners.find((x) => x.id === pid);
+        if (tp && normName(tp.name) !== normName(targetName)) {
+          const goOn = await confirmDlg({
+            title: `确认导入到「${tp.name}」？`,
+            text: `这份记录的对方是「${targetName}」，导进去会和「${tp.name}」混在同一个档案里，之后只能整份删掉重来。建议改选「新建对象」。`,
+            okText: '仍然合并'
+          });
+          if (!goOn) {
+            btn.disabled = false; btn.textContent = `确认导入 ${parsed.messages.length} 条`;
+            return;
+          }
+        }
         await S.updatePartner(state.me.id, pid, { meSpeaker }).catch(() => { });
+      } else {
+        // 「新建」也要再查一次同名，避免同一份记录被导成第二个同名对象
+        const existed = await S.findPartnerByName(state.me.id, targetName);
+        if (existed) {
+          const goOn = await confirmDlg({
+            title: `已经有「${targetName}」了`,
+            text: `列表里已经有《${targetName} · ${fmtNum(existed.msgCount || 0)} 条》。继续新建会出现两个同名对象，曲线各算各的。要不要合并到已有的那个？`,
+            okText: '合并到已有'
+          });
+          if (goOn) {
+            pid = existed.id;
+            await S.updatePartner(state.me.id, pid, { meSpeaker }).catch(() => { });
+          }
+        }
+        if (!pid) {
+          const mode = ($('#newPMode') && $('#newPMode').value) || 'crush';
+          const note = ($('#newPNote') && $('#newPNote').value.trim()) || '';
+          const p = await S.createPartner(state.me.id, { name: targetName, platform, mode, note, meSpeaker });
+          pid = p.id;
+        }
+        state.pid = pid;
       }
 
       const res = await S.importMessages(state.me.id, pid, parsed, {

@@ -244,6 +244,16 @@ p { margin: 0; }
 .field { margin-bottom: 14px; }
 .field > label { display: block; font-size: 12.5px; font-weight: 560; color: var(--ink-2); margin-bottom: 6px; }
 .field .hint { font-size: 11.5px; color: var(--ink-3); margin-top: 5px; }
+.field .hint.warn { color: #b45309; }
+
+/* 导入归属拦截提示 */
+.warn-box {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline;
+  padding: 11px 13px; margin-bottom: 14px; border-radius: 12px;
+  background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+  font-size: 12.5px; line-height: 1.7;
+}
+.warn-box b { color: #78350f; }
 .input, .select, .textarea {
   width: 100%; height: 40px; padding: 0 12px; border-radius: 10px;
   border: 1px solid var(--line); background: var(--surface); color: var(--ink);

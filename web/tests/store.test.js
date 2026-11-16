@@ -106,6 +106,18 @@ function loadStore(subtleOn) {
     removeItem: (k) => ls.delete(k)
   };
   globalThis.indexedDB = makeIDB();
+  // store.js 依赖 CLEngine.hash（取色 / 消息去重）。这里给一个等价接口的最小桩，
+  // 不加载 engine.js，避免测试把两个模块的失败混在一起。
+  if (!globalThis.CLEngine) {
+    globalThis.CLEngine = {
+      hash: (s) => {
+        s = String(s);
+        let h = 2166136261;
+        for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+        return (h >>> 0).toString(36);
+      }
+    };
+  }
   // Node 22 的 globalThis.crypto 是 getter，普通赋值会静默失败，必须 defineProperty
   Object.defineProperty(globalThis, 'crypto', {
     value: subtleOn ? webcrypto : { getRandomValues: (a) => webcrypto.getRandomValues(a) },
@@ -147,6 +159,15 @@ function loadStore(subtleOn) {
   const leak = Object.keys(r0).filter((k) => JSON.stringify(r0[k]).indexOf(acc.salt) >= 0 || JSON.stringify(r0[k]).indexOf(acc.pw) >= 0);
   ok(leak.length === 0, '任何字段值里也不含凭据片段' + (leak.length ? ('：泄漏于 ' + leak.join(',')) : ''));
   ok(r0.email === 'user@test.com' && typeof r0.partnerCount === 'number', '业务字段正常（email/partnerCount）');
+
+  /* ---------------- 3. 同名归并查询 ---------------- */
+  section('3. findPartnerByName（导入前查同名对象）');
+  const p1 = await S2.createPartner(acc.id, { name: '林晚', platform: 'wechat' });
+  await S2.createPartner(acc.id, { name: ' 林晚 ', platform: 'qq' });
+  const hit = await S2.findPartnerByName(acc.id, '林晚');
+  ok(!!hit && hit.id === p1.id, '同名（忽略首尾空格）命中已有对象');
+  ok((await S2.findPartnerByName(acc.id, '陈屿')) === null, '没有同名对象时返回 null');
+  ok((await S2.findPartnerByName(acc.id, '')) === null, '空名字返回 null（不会误命中）');
 
   console.log('\n────────────────────────────────────────────');
   console.log('结果：' + pass + ' 通过 / ' + fail + ' 失败');
