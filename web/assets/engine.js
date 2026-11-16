@@ -196,7 +196,7 @@
     dingtalk: { label: '钉钉', short: '钉', color: '#3f7dff' },
     whatsapp: { label: 'WhatsApp', short: 'W', color: '#25d366' },
     json: { label: 'JSON', short: '{}', color: '#8b5cf6' },
-    paste: { label: '粘贴', short: '文', color: '#f59e0b' },
+    paste: { label: '剪贴板导入', short: '文', color: '#f59e0b' },
     file: { label: '文件', short: '档', color: '#64748b' },
     unknown: { label: '未知格式', short: '?', color: '#94a3b8' }
   };
