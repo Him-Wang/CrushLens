@@ -515,6 +515,20 @@
     document.addEventListener('keydown', (e) => {
       if ((e.key === 'Escape' || e.key === 'Esc') && isOpen()) { e.stopPropagation(); close(); }
     });
+    // 焦点陷阱：抽屉开着时 Tab 只在抽屉内循环，不会跑到背后的正文里
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab' || !isOpen()) return;
+      const items = [...side.querySelectorAll('button, a[href], select, input, textarea, [tabindex]:not([tabindex="-1"])')]
+        .filter((x) => !x.disabled && x.offsetParent !== null);
+      if (!items.length) return;
+      const first = items[0], last = items[items.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !side.contains(active))) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && (active === last || !side.contains(active))) {
+        e.preventDefault(); first.focus();
+      }
+    });
     // 拉宽回桌面尺寸时把状态清干净
     const onChange = (ev) => {
       if (ev.matches) return;
