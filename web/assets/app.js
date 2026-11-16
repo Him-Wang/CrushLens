@@ -314,13 +314,14 @@
       ${ovSwitch(pid)}
 
       <div class="grid g4 mb16">
-        ${kpi('当前情感浓度', Math.round(a.total), '', `最近 ${a.spanDays} 天 · ${a.count} 条消息`, spark)}
-        ${kpi('本周变化', `${a.momentum > 0 ? '+' : ''}${a.momentum.toFixed(1)}`, '',
-      `<span class="kpi-delta ${trendTone}">${icon(trendIcon, 12)} ${a.narrative.dir}</span>`)}
-        ${kpi('覆盖天数', a.spanDays, '天', `从 ${a.firstDay.slice(5)} 到 ${a.lastDay.slice(5)}`)}
+        ${kpi('情感浓度', Math.round(a.total), '', `全部 ${fmtNum(a.count)} 条 · 覆盖 ${a.spanDays} 天`, spark)}
+        ${kpi('近期变化', `${a.momentum > 0 ? '+' : ''}${a.momentum.toFixed(1)}`, '',
+      `<span class="kpi-delta ${trendTone}">${icon(trendIcon, 12)} ${a.narrative.dir} · 近 ${a.winLen} 个活跃日 vs 前 ${a.winLen} 个</span>`)}
+        ${kpi('覆盖天数', a.spanDays, '天', `全部历史 · ${a.firstDay.slice(5)} 至 ${a.lastDay.slice(5)}`)}
         ${kpi('六维最强', a.narrative ? Object.entries(a.dims).sort((x, y) => y[1] - x[1])[0][0] : '—',
-      '', `得分 ${Object.entries(a.dims).sort((x, y) => y[1] - x[1])[0][1]}`)}
+      '', `得分 ${Object.entries(a.dims).sort((x, y) => y[1] - x[1])[0][1]} · 全量特征＋近 7 个活跃日`)}
       </div>
+      <p class="kpi-note">${icon('flat', 12)} 上方四个 KPI 是<b>全部历史</b>口径；下面的曲线、转折点与 7 天预测按右上角 <b>${state.range} 天</b> 区间显示。</p>
 
       <div class="grid g-2-1 mb16">
         <div class="card">

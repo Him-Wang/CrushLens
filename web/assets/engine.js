@@ -603,6 +603,7 @@
       score: lastScore,
       avg7: Math.round(avg7 * 10) / 10,
       momentum: Math.round(momentum * 10) / 10,
+      winLen,
       slope,
       dims,
       forecast,
