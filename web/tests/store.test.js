@@ -179,6 +179,22 @@ function loadStore(subtleOn) {
   globalThis.localStorage.setItem(KEY, JSON.stringify({ uid: acc.id, at: Date.now() }));
   ok(!!(await S2.current()), '7 天内的会话仍然有效');
 
+  /* ---------------- 4b. 会话滑动续期与标志复位 ---------------- */
+  section('4b. 会话滑动续期 / 标志复位');
+  // 2 天前的会话：有效，且读取后 at 被刷新到接近现在（滑动续期）
+  const oldAt = Date.now() - 2 * 24 * 3600 * 1000;
+  globalThis.localStorage.setItem(KEY, JSON.stringify({ uid: acc.id, at: oldAt }));
+  ok(!!(await S2.current()), '2 天前的会话有效');
+  const rolled = JSON.parse(globalThis.localStorage.getItem(KEY));
+  ok(rolled.at > oldAt, '读取有效会话后 at 已滑动续期');
+  ok((Date.now() - rolled.at) < 24 * 3600 * 1000, '续期后的 at 落在 1 天以内');
+  // 过期后重新登录：wasSessionExpired 必须复位，否则登录页会误报「已过期」
+  globalThis.localStorage.setItem(KEY, JSON.stringify({ uid: acc.id, at: Date.now() - 8 * 24 * 3600 * 1000 }));
+  await S2.current();
+  ok(S2.wasSessionExpired() === true, '再次造出过期会话');
+  await S2.login('user@test.com', 'secret123');
+  ok(S2.wasSessionExpired() === false, '登录成功后过期标志已复位');
+
   /* ---------------- 5. 只清聊天数据 ---------------- */
   section('5. clearChatData（保留账号）');
   const beforeN = (await S2.listPartners(acc.id)).length;

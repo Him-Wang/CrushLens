@@ -108,6 +108,9 @@
   /* ---------------- 会话 ---------------- */
   function saveSession(uid) {
     localStorage.setItem(SESSION_KEY, JSON.stringify({ uid, at: Date.now() }));
+    // 登录/注册成功即复位过期标志，否则同一个页面生命周期里
+    // 「旧会话过期 → 重新登录」后登录页仍提示「已过期」
+    sessionExpired = false;
   }
   function clearSession() { localStorage.removeItem(SESSION_KEY); }
 
@@ -115,14 +118,22 @@
   const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
   let sessionExpired = false;
 
+  // 滑动续期：会话还有效但上次活跃已超过 1 天时刷新 at，
+  // 「连续每天都在用」不会被 7 天硬上限踢出去；真正 7 天没碰才会过期
+  const SESSION_ROLL = 24 * 60 * 60 * 1000;
+
   function sessionUid() {
     try {
       const s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
       if (!s || !s.uid) return null;
-      if (s.at && (Date.now() - s.at) > SESSION_TTL) {
+      const age = s.at ? (Date.now() - s.at) : 0;
+      if (s.at && age > SESSION_TTL) {
         sessionExpired = true;
         localStorage.removeItem(SESSION_KEY);
         return null;
+      }
+      if (!s.at || age > SESSION_ROLL) {
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ uid: s.uid, at: Date.now() }));
       }
       return s.uid;
     } catch (e) { return null; }
