@@ -87,13 +87,29 @@
     $('#logoutBtn').onclick = async () => {
       const ok = await confirmDlg({ title: '退出登录', text: '数据仍然保存在本机，下次登录还能看到。共用电脑的话，下一步可以顺手清掉本机聊天记录。', okText: '继续' });
       if (!ok) return;
-      const clear = await confirmDlg({
-        title: '要一并清除本机聊天数据吗？',
-        text: '清除后，这台电脑上的追踪对象、聊天记录和分析报告都会删除（账号保留），无法恢复。只是换个人用的话，选「保留数据」。',
-        okText: '清除并退出',
-        danger: true
+      // 三态：keep=保留数据并退出 / clear=清除并退出 / abort=算了不退
+      const choice = await new Promise((resolve) => {
+        let done = false;
+        const m = modal({
+          title: '要一并清除本机聊天数据吗？',
+          html: `<p class="muted" style="margin:0 0 6px">清除后，这台电脑上的追踪对象、聊天记录和分析报告都会删除（账号保留），无法恢复。只是换个人用的话，选「保留数据并退出」。</p>`,
+          footer: `
+            <button class="btn ghost" data-x="abort">取消</button>
+            <button class="btn ghost" data-x="keep">保留数据并退出</button>
+            <button class="btn danger" data-x="clear">清除并退出</button>`,
+          onMount(wrap) {
+            wrap.querySelectorAll('[data-x]').forEach((b) => b.onclick = () => {
+              done = true; m.close(); resolve(b.dataset.x);
+            });
+          }
+        });
+        // 点遮罩 / Esc / 右上角 × 关闭都视为「算了不退」
+        const timer = setInterval(() => {
+          if (!document.contains(m.el)) { clearInterval(timer); if (!done) resolve('abort'); }
+        }, 120);
       });
-      if (clear) {
+      if (choice !== 'keep' && choice !== 'clear') return;
+      if (choice === 'clear') {
         try { await S.clearChatData(state.me.id); } catch (e) { /* 清失败也别把退出卡住 */ }
       }
       stopRealtime();
