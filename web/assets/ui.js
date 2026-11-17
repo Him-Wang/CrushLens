@@ -119,6 +119,8 @@
   }
 
   /* ---------------- 弹窗 ---------------- */
+  /* opts: title / sub / html / footer / wide / onMount(wrap, close) / onClose()
+   * onClose 在任何方式关闭后都会触发（按钮、遮罩、Esc、右上角 ×），且只触发一次。 */
   function modal(opts) {
     const wrap = el('div', 'modal-mask');
     wrap.innerHTML = `
@@ -135,16 +137,25 @@
       </div>`;
     document.body.appendChild(wrap);
     document.body.classList.add('no-scroll');
+    let closed = false;
     const close = () => {
+      if (closed) return;
+      closed = true;
+      document.removeEventListener('keydown', onKey);
       wrap.classList.remove('in');
-      setTimeout(() => { wrap.remove(); document.body.classList.remove('no-scroll'); }, 180);
+      setTimeout(() => {
+        wrap.remove();
+        if (!document.querySelector('.modal-mask')) document.body.classList.remove('no-scroll');
+        if (typeof opts.onClose === 'function') opts.onClose();
+      }, 180);
     };
+    function onKey(e) {
+      if (e.key === 'Escape') { e.stopPropagation(); close(); }
+    }
     wrap.addEventListener('click', (e) => {
       if (e.target === wrap || e.target.closest('[data-close]')) close();
     });
-    document.addEventListener('keydown', function onKey(e) {
-      if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); }
-    });
+    document.addEventListener('keydown', onKey);
     requestAnimationFrame(() => wrap.classList.add('in'));
     if (opts.onMount) opts.onMount(wrap, close);
     return { el: wrap, close };
@@ -554,22 +565,34 @@
     return { open, close, isOpen };
   }
 
-  /* 主题初始化 + 侧栏切换器接线；onChange 用于切换后重绘当前视图 */
+  /* 把所有主题下拉（侧栏 + 登录页）接到 CLTheme 上；可重复调用（新的下拉会自动接上） */
+  function wireThemeSelects() {
+    if (!root.CLTheme) return;
+    const sync = () => $$('[data-theme-select]').forEach((s) => {
+      s.value = CLTheme.isManual() ? CLTheme.current() : 'system';
+    });
+    $$('[data-theme-select]').forEach((s) => {
+      if (s.dataset.themeBound) return;
+      s.dataset.themeBound = '1';
+      s.onchange = () => CLTheme.apply(s.value);
+    });
+    sync();
+    if (!wireThemeSelects._syncing) {
+      wireThemeSelects._syncing = true;
+      CLTheme.onChange(() => setTimeout(sync, 0));
+    }
+  }
+
+  /* 主题初始化 + 所有主题下拉接线；onChange 用于切换后重绘当前视图 */
   function wireTheme(onChange) {
     if (!root.CLTheme) return;
     CLTheme.init();
-    const sel = document.querySelector('#themeSelect');
-    if (sel) {
-      const sync = () => { sel.value = CLTheme.isManual() ? CLTheme.current() : 'system'; };
-      sync();
-      sel.onchange = () => { CLTheme.apply(sel.value); };
-      CLTheme.onChange(() => setTimeout(sync, 0));
-    }
+    wireThemeSelects();
     if (typeof onChange === 'function') CLTheme.onChange(onChange);
   }
 
   root.UI = {
-    $, $$, esc, el, icon, toast, modal, confirmDlg, sideDrawer, wireTheme,
+    $, $$, esc, el, icon, toast, modal, confirmDlg, sideDrawer, wireTheme, wireThemeSelects,
     trendChart, sparkline, gauge, radar, donut, bars, avatar, empty,
     fmtDate, fmtDateFull, fmtDT, relTime, fmtNum, chipTrend, scoreClass,
     cssVar,

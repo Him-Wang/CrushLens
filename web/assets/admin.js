@@ -6,11 +6,12 @@
 (function () {
   'use strict';
   const { $, $$, esc, icon, toast, modal, confirmDlg, donut, bars, avatar,
-    empty, fmtDate, fmtDateFull, fmtDT, relTime, fmtNum, sideDrawer, cssVar, avatarPair, wireTheme } = UI;
+    empty, fmtDate, fmtDateFull, fmtDT, relTime, fmtNum, sideDrawer, cssVar, avatarPair,
+    wireTheme, wireThemeSelects } = UI;
   const S = Store, E = CLEngine;
 
-  // 权限门页面也要跟随主题（含系统深色的实时切换）
-  if (window.CLTheme) CLTheme.init();
+  // 权限门页面也要跟随主题（含系统深色的实时切换），门上的主题下拉在这里就接上
+  if (window.CLTheme) { CLTheme.init(); wireThemeSelects(); }
 
   const state = { me: null, role: null, view: 'dash', owner: null, search: '' };
 
@@ -46,10 +47,24 @@
   }
 
   /* ================= 入口页 ================= */
+  const THEME_ROW = `
+      <div class="theme-row">
+        <span>主题</span>
+        <select data-theme-select aria-label="配色主题">
+          <option value="system">跟随系统</option>
+          <option value="rose">玫瑰</option>
+          <option value="mist">雾蓝</option>
+          <option value="matcha">抹茶</option>
+          <option value="dusk">黄昏</option>
+          <option value="night">夜间</option>
+        </select>
+      </div>`;
+
   function showGate(html) {
     $('#gate').hidden = false;
     $('#app').hidden = true;
-    $('#gateCard').innerHTML = html;
+    $('#gateCard').innerHTML = html + THEME_ROW;
+    wireThemeSelects();
   }
 
   function gateLogin() {
@@ -181,7 +196,7 @@
       $('#meAvatar').style.background = bg;
       $('#meAvatar').style.color = fg;
       renderNav();
-      if (state.view) goto(state.view);
+      if (state.view) goto(state.view, { quiet: true });
     });
     S.log(state.me.id, 'console_open', '', { role: state.role.level });
     renderNav();
@@ -208,16 +223,18 @@
       </div>`;
   }
 
-  async function goto(view) {
+  /* quiet: 换主题时不闪「加载中」、不回滚滚动位置 */
+  async function goto(view, opts) {
+    const quiet = !!(opts && opts.quiet);
     state.view = view;
     renderNav();
-    $('#main').innerHTML = `<div class="card pad center muted small" style="padding:60px">加载中…</div>`;
+    if (!quiet) $('#main').innerHTML = `<div class="card pad center muted small" style="padding:60px">加载中…</div>`;
     if (view === 'dash') await viewDash();
     else if (view === 'users') await viewUsers();
     else if (view === 'usage') await viewUsage();
     else if (view === 'perms') await viewPerms();
     else if (view === 'audit') await viewAudit();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!quiet) window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function head(title, sub, actions) {

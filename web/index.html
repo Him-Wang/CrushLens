@@ -88,6 +88,18 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){document.documen
         <b>关于账号：</b>当前是本机版，账号和数据都保存在这台设备的浏览器中，换设备或清理浏览器数据会丢失。需要多人跨设备同步时，告诉我「开通云服务」即可升级。
       </div>
 
+      <div class="theme-row">
+        <span>主题</span>
+        <select data-theme-select aria-label="配色主题">
+          <option value="system">跟随系统</option>
+          <option value="rose">玫瑰</option>
+          <option value="mist">雾蓝</option>
+          <option value="matcha">抹茶</option>
+          <option value="dusk">黄昏</option>
+          <option value="night">夜间</option>
+        </select>
+      </div>
+
       <div class="row between" style="margin-top:16px">
         <a class="small muted" href="admin.html" style="text-decoration:underline">开发者入口 →</a>
         <span class="tiny muted">v2.0</span>
@@ -131,7 +143,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){document.documen
     <div class="side-foot">
       <div class="theme-row">
         <span>主题</span>
-        <select id="themeSelect" aria-label="主题">
+        <select id="themeSelect" data-theme-select aria-label="主题">
           <option value="system">跟随系统</option>
           <option value="rose">玫瑰</option>
           <option value="mist">雾蓝</option>

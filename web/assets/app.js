@@ -5,13 +5,14 @@
   'use strict';
   const { $, $$, esc, icon, toast, modal, confirmDlg, trendChart, sparkline,
     gauge, radar, donut, bars, avatar, empty, fmtDate, fmtDateFull, fmtDT,
-    relTime, fmtNum, chipTrend, scoreClass, el, sideDrawer, cssVar, avatarPair, wireTheme } = UI;
+    relTime, fmtNum, chipTrend, scoreClass, el, sideDrawer, cssVar, avatarPair,
+    wireTheme, wireThemeSelects } = UI;
   const S = Store, E = CLEngine;
 
   const MEDIA_RE = /\[(图片|表情|语音|视频|文件|动画表情|链接|位置|红包|转账|名片|聊天记录|小程序|视频号|音乐|拍一拍)\]/g;
 
-  // 登录页也要跟随主题（含系统深色的实时切换）
-  if (window.CLTheme) CLTheme.init();
+  // 登录页也要跟随主题（含系统深色的实时切换），登录页的主题下拉在这里就接上
+  if (window.CLTheme) { CLTheme.init(); wireThemeSelects(); }
 
   const state = {
     me: null, role: null, partners: [], pid: null,
@@ -104,12 +105,10 @@
             wrap.querySelectorAll('[data-x]').forEach((b) => b.onclick = () => {
               done = true; m.close(); resolve(b.dataset.x);
             });
-          }
+          },
+          // 点遮罩 / Esc / 右上角 × 关闭都视为「算了不退」
+          onClose() { if (!done) resolve('abort'); }
         });
-        // 点遮罩 / Esc / 右上角 × 关闭都视为「算了不退」
-        const timer = setInterval(() => {
-          if (!document.contains(m.el)) { clearInterval(timer); if (!done) resolve('abort'); }
-        }, 120);
       });
       if (choice !== 'keep' && choice !== 'clear') return;
       if (choice === 'clear') {
@@ -128,7 +127,7 @@
       $('#meAvatar').style.color = fg;
       renderNav();
       renderPartnerList();
-      if (state.view) goto(state.view);
+      if (state.view) goto(state.view, { quiet: true });
     });
 
     await loadPartners();
@@ -196,11 +195,13 @@
     });
   }
 
-  async function goto(view) {
+  /* quiet: 不为切换视图而清空 #main、也不回滚滚动位置（换主题时用，避免图表闪一下） */
+  async function goto(view, opts) {
+    const quiet = !!(opts && opts.quiet);
     stopRealtime();
     state.view = view;
     renderNav();
-    $('#main').innerHTML = `<div class="card pad center muted small" style="padding:60px">正在计算…</div>`;
+    if (!quiet) $('#main').innerHTML = `<div class="card pad center muted small" style="padding:60px">正在计算…</div>`;
     try {
       if (view === 'overview') await viewOverview();
       else if (view === 'local') await viewLocal();
@@ -213,7 +214,7 @@
       console.error(err);
       $('#main').innerHTML = `<div class="card pad"><h3>出错了</h3><p class="muted small mt8">${esc(err.message || err)}</p></div>`;
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!quiet) window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   /* ================= 计算 ================= */

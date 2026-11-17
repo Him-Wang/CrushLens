@@ -7,7 +7,7 @@
   --surface-2: #fdfbfa;
   --ink: #17151a;
   --ink-2: #57534e;
-  --ink-3: #918a84;
+  --ink-3: #76706c;   /* 12px 次要文字：对 #fff 4.88、对 --bg 4.61，AA 达标 */
   --line: #ece7e4;
   --line-2: #f5f1ef;
 
@@ -78,7 +78,7 @@
   --surface-2: #f8fafd;
   --ink: #141a26;
   --ink-2: #4d5866;
-  --ink-3: #8b96a5;
+  --ink-3: #69717d;   /* 4.93 / 4.63 */
   --line: #e4eaf1;
   --line-2: #f0f4f9;
 
@@ -102,7 +102,7 @@
   --surface-2: #f9fbf8;
   --ink: #151a15;
   --ink-2: #51584f;
-  --ink-3: #8e968b;
+  --ink-3: #6d736b;   /* 4.87 / 4.63 */
   --line: #e5eae3;
   --line-2: #f1f4ef;
 
@@ -126,7 +126,7 @@
   --surface-2: #fdfaf7;
   --ink: #1b1611;
   --ink-2: #5c534a;
-  --ink-3: #96897c;
+  --ink-3: #796f64;   /* 4.92 / 4.65 */
   --line: #eee5dc;
   --line-2: #f6efe9;
 
@@ -244,6 +244,9 @@
   padding: 0 10px; cursor: pointer;
 }
 .theme-row select:focus-visible { outline: 2px solid var(--rose); outline-offset: 1px; }
+
+/* 登录页 / 权限门底部的主题下拉 */
+.auth-card .theme-row { margin: 14px 0 0; }
 
 /* ---------------- 减少动态效果 ---------------- */
 @media (prefers-reduced-motion: reduce) {
