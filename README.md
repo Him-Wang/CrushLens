@@ -148,6 +148,8 @@ node tests/engine.test.js       # 引擎：曲线完整性、伪转折、样本�
 node tests/store.test.js        # 存储：会话过期、去重、权限、清除数据
 ```
 
+不想用线上版，或者想自己托管？[v2.0.0 Release](https://github.com/Him-Wang/CrushLens/releases/tag/v2.0.0) 里附了整站离线包 `CrushLens-web-2.0.0.zip`，解压后同样用上面的命令起一个静态服务器即可。
+
 线上不用手动发布：`.github/workflows/pages.yml` 在 `main` 上 `web/**` 有改动时，先跑 `node --check`
 与 `web/tests/` 里的两套单元测试，再把 `web/` 作为站点根发布到 GitHub Pages。
 Pages 的 source 必须是 **GitHub Actions**（不是「Deploy from a branch」），否则站点根还是旧入口。
