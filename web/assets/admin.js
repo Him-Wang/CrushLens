@@ -6,8 +6,11 @@
 (function () {
   'use strict';
   const { $, $$, esc, icon, toast, modal, confirmDlg, donut, bars, avatar,
-    empty, fmtDate, fmtDateFull, fmtDT, relTime, fmtNum, sideDrawer } = UI;
+    empty, fmtDate, fmtDateFull, fmtDT, relTime, fmtNum, sideDrawer, cssVar, avatarPair, wireTheme } = UI;
   const S = Store, E = CLEngine;
+
+  // 权限门页面也要跟随主题（含系统深色的实时切换）
+  if (window.CLTheme) CLTheme.init();
 
   const state = { me: null, role: null, view: 'dash', owner: null, search: '' };
 
@@ -164,12 +167,22 @@
     $('#app').hidden = false;
     $('#meName').textContent = state.me.name;
     $('#meAvatar').textContent = String(state.me.name || '?').slice(0, 1);
+    const [meBg, meFg] = avatarPair(S.pickColor(state.me.name));
+    $('#meAvatar').style.background = meBg;
+    $('#meAvatar').style.color = meFg;
     $('#meRole').textContent = state.role.level === 'owner' ? '总开发者 · 本机唯一' : '授权开发者';
     $('#logoutBtn').onclick = async () => {
       if (!(await confirmDlg({ title: '退出开发端', text: '只是退出登录，不会删除任何数据。', okText: '退出' }))) return;
       S.logout(); location.reload();
     };
     sideDrawer({ side: '#side', toggle: '#sideToggle' });
+    wireTheme(() => {
+      const [bg, fg] = avatarPair(S.pickColor(state.me.name));
+      $('#meAvatar').style.background = bg;
+      $('#meAvatar').style.color = fg;
+      renderNav();
+      if (state.view) goto(state.view);
+    });
     S.log(state.me.id, 'console_open', '', { role: state.role.level });
     renderNav();
     goto('dash');
@@ -188,7 +201,7 @@
       : `<span class="badge amber" style="margin-left:auto">限时</span>`;
     $('#quick').innerHTML = `
       <div class="pitem" style="cursor:default">
-        <span class="avatar" style="width:30px;height:30px;font-size:12px;background:#e0e7ff;color:#4338ca">${esc(state.me.name.slice(0, 1))}</span>
+        ${avatar(state.me.name, S.pickColor(state.me.name), 30)}
         <div class="pitem-body"><div class="pitem-name">${esc(state.me.name)}</div>
         <div class="pitem-sub">${state.role.expiresAt ? '到期 ' + fmtDT(state.role.expiresAt) : '长期有效'}</div></div>
         ${ownerTag}
@@ -258,7 +271,7 @@
           <div class="card-body">
             ${bars(o.days.map((d) => ({ label: d.date.slice(5), value: d.imports })), { height: 130 })}
             <div class="mt12" style="opacity:.55">
-              ${bars(o.days.map((d) => ({ label: d.date.slice(5), value: d.messages, color: '#a5b4fc' })), { height: 90, showLabels: false })}
+              ${bars(o.days.map((d) => ({ label: d.date.slice(5), value: d.messages, color: cssVar('--acc-a', '#a5b4fc') })), { height: 90, showLabels: false })}
             </div>
           </div>
         </div>
@@ -292,7 +305,7 @@
           <div class="card-body">
             ${rows.slice().sort((a, b) => b.msgCount - a.msgCount).slice(0, 6).map((u) => `
               <div class="row between" style="padding:9px 0;border-bottom:1px solid var(--line-2)">
-                <div class="row">${avatar(u.name, ['#e0e7ff', '#4338ca'], 30)}
+                <div class="row">${avatar(u.name, S.pickColor(u.name), 30)}
                   <div><div style="font-size:13px;font-weight:560">${esc(u.name)}</div>
                     <div class="tiny muted">${esc(u.role)}</div></div></div>
                 <div class="num" style="font-weight:650">${fmtNum(u.msgCount)}</div>
@@ -328,7 +341,7 @@
             </tr></thead>
             <tbody>
               ${list.map((u) => `<tr data-uid="${u.id}" style="cursor:pointer">
-                <td><div class="cell-main">${avatar(u.name, ['#e0e7ff', '#4338ca'], 32)}
+                <td><div class="cell-main">${avatar(u.name, S.pickColor(u.name), 32)}
                   <div><div class="n">${esc(u.name)}</div><div class="s">${esc(u.email)}</div></div></div></td>
                 <td><span class="badge ${u.role === '总开发者' ? 'rose' : u.role === '授权开发者' ? 'amber' : 'gray'}">${esc(u.role)}</span></td>
                 <td class="num">${u.partnerCount}</td>
@@ -362,7 +375,7 @@
     const body = `
       <div class="row between mb16">
         <div class="row">
-          ${avatar(u.name, ['#e0e7ff', '#4338ca'], 46)}
+          ${avatar(u.name, S.pickColor(u.name), 46)}
           <div>
             <div style="font-size:16px;font-weight:650">${esc(u.name)}</div>
             <div class="tiny muted">${esc(u.email)} · 注册于 ${fmtDateFull(u.createdAt)}</div>
@@ -383,7 +396,7 @@
         <div class="table-wrap"><table class="tb">
           <thead><tr><th>对象</th><th>平台</th><th>消息</th><th>最近导入</th><th>内容</th></tr></thead>
           <tbody>${partners.map((p) => `<tr>
-            <td><div class="cell-main"><span class="avatar" style="width:28px;height:28px;font-size:11px;background:${(p.color || ['#fecdd3', '#e11d48'])[0]};color:${(p.color || ['#fecdd3', '#e11d48'])[1]}">${esc(p.name.slice(0, 1))}</span>
+            <td><div class="cell-main"><span class="avatar" style="width:28px;height:28px;font-size:11px;background:${avatarPair(p.color)[0]};color:${avatarPair(p.color)[1]}">${esc(p.name.slice(0, 1))}</span>
               <span class="n">${esc(p.name)}</span></div></td>
             <td><span class="badge gray">${esc((E.PLATFORM_META[p.platform] || {}).label || p.platform)}</span></td>
             <td class="num">${fmtNum(p.msgCount || 0)}</td>
@@ -469,7 +482,7 @@
         <div class="card"><div class="card-head"><div><h3>人均消息量</h3><div class="sub">Top 8</div></div></div>
           <div class="card-body">${bars(avgPerUser.sort((a, b) => b.value - a.value).slice(0, 8), { height: 150 })}</div></div>
         <div class="card"><div class="card-head"><div><h3>导入时段分布</h3><div class="sub">每 2 小时聚合</div></div></div>
-          <div class="card-body">${bars(hourBuckets.map((v, i) => ({ label: (i * 2) + '点', value: v, color: '#818cf8' })), { height: 150 })}</div></div>
+          <div class="card-body">${bars(hourBuckets.map((v, i) => ({ label: (i * 2) + '点', value: v, color: cssVar('--acc-a', '#818cf8') })), { height: 150 })}</div></div>
       </div>
 
       <div class="card">
@@ -557,7 +570,7 @@
       const st = g.status === 'revoked' ? '已撤销' : expired ? '已过期' : '生效中';
       const tone = g.status === 'revoked' ? 'gray' : expired ? 'gray' : 'green';
       return `<tr>
-                  <td><div class="cell-main">${avatar(g.name || '?', ['#e0e7ff', '#4338ca'], 28)}
+                  <td><div class="cell-main">${avatar(g.name || '?', S.pickColor(g.name || '?'), 28)}
                     <div><div class="n">${esc(g.name || nameOf(g.uid))}</div><div class="s">${esc(g.email || '')}</div></div></div></td>
                   <td><span class="badge ${g.level === 'owner' ? 'rose' : 'amber'}">${g.level === 'owner' ? '总开发者' : '授权开发者'}</span></td>
                   <td><span class="badge ${tone}">${st}</span></td>

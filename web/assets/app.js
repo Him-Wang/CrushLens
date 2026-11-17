@@ -5,10 +5,13 @@
   'use strict';
   const { $, $$, esc, icon, toast, modal, confirmDlg, trendChart, sparkline,
     gauge, radar, donut, bars, avatar, empty, fmtDate, fmtDateFull, fmtDT,
-    relTime, fmtNum, chipTrend, scoreClass, el, sideDrawer } = UI;
+    relTime, fmtNum, chipTrend, scoreClass, el, sideDrawer, cssVar, avatarPair, wireTheme } = UI;
   const S = Store, E = CLEngine;
 
   const MEDIA_RE = /\[(图片|表情|语音|视频|文件|动画表情|链接|位置|红包|转账|名片|聊天记录|小程序|视频号|音乐|拍一拍)\]/g;
+
+  // 登录页也要跟随主题（含系统深色的实时切换）
+  if (window.CLTheme) CLTheme.init();
 
   const state = {
     me: null, role: null, partners: [], pid: null,
@@ -78,9 +81,9 @@
 
     $('#meName').textContent = acc.name;
     $('#meAvatar').textContent = String(acc.name || '?').slice(0, 1);
-    const c = S.pickColor(acc.name);
-    $('#meAvatar').style.background = c[0];
-    $('#meAvatar').style.color = c[1];
+    const [meBg, meFg] = avatarPair(S.pickColor(acc.name));
+    $('#meAvatar').style.background = meBg;
+    $('#meAvatar').style.color = meFg;
     $('#meRole').textContent = state.role.level === 'owner' ? '总开发者' :
       state.role.level === 'dev' ? '授权开发者' : '普通用户';
 
@@ -119,6 +122,14 @@
 
     $('#addPartnerBtn').onclick = () => newPartnerDialog();
     sideDrawer({ side: '#side', toggle: '#sideToggle' });
+    wireTheme(() => {
+      const [bg, fg] = avatarPair(S.pickColor(state.me.name));
+      $('#meAvatar').style.background = bg;
+      $('#meAvatar').style.color = fg;
+      renderNav();
+      renderPartnerList();
+      if (state.view) goto(state.view);
+    });
 
     await loadPartners();
     state.bridge.links = loadLinks();
@@ -325,7 +336,7 @@
 
     const c = partner.color || S.pickColor(partner.name);
     const scores = a.daily.map((d) => d.score).filter((v) => v != null);
-    const spark = sparkline(scores.slice(-18), '#e11d48', 80, 26);
+    const spark = sparkline(scores.slice(-18), cssVar('--rose', '#e11d48'), 80, 26);
 
     const trendTone = a.momentum > 1.5 ? 'up' : a.momentum < -1.5 ? 'down' : 'flat';
     const trendIcon = a.momentum > 1.5 ? 'up' : a.momentum < -1.5 ? 'down' : 'flat';
@@ -366,8 +377,8 @@
           <div class="card-body" id="chartBox"></div>
           <div class="card-body" style="padding-top:0;display:flex;gap:18px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-3)">
             <span class="row">${icon('flat', 13)} 逐日浓度</span>
-            <span class="row" style="color:#a1a1aa">${icon('flat', 13)} 7 日均线</span>
-            <span class="row" style="color:#7c3aed">${icon('flat', 13)} 未来 7 天预测</span>
+            <span class="row" style="color:var(--legend-ma)">${icon('flat', 13)} 7 日均线</span>
+            <span class="row" style="color:var(--violet)">${icon('flat', 13)} 未来 7 天预测</span>
             <span class="row" style="color:var(--rose)">${icon('spark', 13)} 转折点</span>
           </div>
         </div>
@@ -428,7 +439,7 @@
               ${a.forecast.map((f, i) => `
                 <div style="flex:1;min-width:62px;text-align:center;padding:9px 4px;border-radius:11px;background:var(--surface-2);border:1px solid var(--line-2)">
                   <div class="tiny muted">${f.date.slice(5)}</div>
-                  <div style="font-size:16px;font-weight:700;color:${f.score >= 60 ? '#e11d48' : f.score >= 45 ? '#b45309' : '#64748b'}">${Math.round(f.score)}</div>
+                  <div style="font-size:16px;font-weight:700;color:${f.score >= 60 ? cssVar('--fc-hi', '#e11d48') : f.score >= 45 ? cssVar('--fc-mid', '#b45309') : cssVar('--fc-lo', '#64748b')}">${Math.round(f.score)}</div>
                   <div class="tiny muted">${Math.round(f.lo)}–${Math.round(f.hi)}</div>
                 </div>`).join('')}
             </div>
@@ -1033,7 +1044,7 @@
 
       $('#previewBody').innerHTML = `
         <div class="center" style="padding:26px 8px">
-          <div class="empty-ico" style="margin:0 auto 12px;background:#ecfdf5;color:#059669">${icon('check', 24)}</div>
+          <div class="empty-ico" style="margin:0 auto 12px;background:var(--ok-bg);color:var(--ok-fg)">${icon('check', 24)}</div>
           <h3 style="font-size:16px">导入完成</h3>
           <p class="muted small mt8">新增 <b style="color:var(--ink)">${res.added}</b> 条${res.skipped ? `，跳过重复 <b style="color:var(--ink)">${res.skipped}</b> 条` : ''}</p>
           <div class="parse-summary" style="justify-content:center;margin-top:16px">
@@ -1588,7 +1599,7 @@
     };
 
     const appCards = (b.apps || []).map((a) => {
-      const m = appMeta[a.key] || { label: a.label, color: '#888', short: '?' };
+      const m = appMeta[a.key] || { label: a.label, color: cssVar('--ink-3', '#888'), short: '?' };
       const stateTxt = a.running ? '正在运行' : a.installed ? '已安装 · 未运行' : '未检测到';
       const dotCls = a.running ? 'live' : a.installed ? 'idle' : 'off';
       let note = '';
@@ -1611,7 +1622,7 @@
 
     const inboxCard = `<div class="appcard inbox">
       <div class="ac-top">
-        <span class="ac-ico" style="background:#fee2e2;color:#e11d48">${icon('folder', 16)}</span>
+        <span class="ac-ico" style="background:var(--rose-soft);color:var(--rose)">${icon('folder', 16)}</span>
         <div style="min-width:0">
           <div class="ac-name">投递箱<i class="dot live"></i></div>
           <div class="ac-state">${b.contacts.length} 个聊天文件 · ${b.inboxOnly ? '仅扫这一个文件夹' : '含桌面/下载'}</div>

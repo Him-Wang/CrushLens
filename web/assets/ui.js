@@ -20,6 +20,12 @@
     return n;
   }
 
+  /* 读当前主题的 CSS 变量（JS 生成的 SVG 内联色从这里取，换主题才不漏） */
+  function cssVar(name, fallback) {
+    if (root.CLTheme && root.CLTheme.cssVar) return root.CLTheme.cssVar(name, fallback);
+    return fallback || '';
+  }
+
   /* ---------------- 图标 ---------------- */
   const ICONS = {
     dash: 'M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z',
@@ -257,9 +263,9 @@
           <stop offset="100%" stop-color="var(--rose)" stop-opacity="0"/>
         </linearGradient>
         <linearGradient id="lineG" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stop-color="#fb7185"/>
-          <stop offset="55%" stop-color="#e11d48"/>
-          <stop offset="100%" stop-color="#9f1239"/>
+          <stop offset="0%" stop-color="${cssVar('--acc-a', '#fb7185')}"/>
+          <stop offset="55%" stop-color="${cssVar('--acc-b', '#e11d48')}"/>
+          <stop offset="100%" stop-color="${cssVar('--acc-c', '#9f1239')}"/>
         </linearGradient>
       </defs>
       ${yGrid}
@@ -327,10 +333,10 @@
     const r = 74, cx = 100, cy = 100;
     const circ = Math.PI * r;
     const pct = Math.max(0, Math.min(100, score)) / 100;
-    const col = score >= 70 ? '#e11d48' : score >= 50 ? '#f59e0b' : '#64748b';
+    const col = score >= 70 ? cssVar('--score-hi', '#e11d48') : score >= 50 ? cssVar('--score-mid', '#f59e0b') : cssVar('--score-lo', '#64748b');
     return `<svg viewBox="0 0 200 118" class="gauge" style="width:${size}px">
       <defs><linearGradient id="gG" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0%" stop-color="#fda4af"/><stop offset="100%" stop-color="${col}"/>
+        <stop offset="0%" stop-color="${cssVar('--gauge-a', '#fda4af')}"/><stop offset="100%" stop-color="${col}"/>
       </linearGradient></defs>
       <path d="M${cx - r} ${cy} A${r} ${r} 0 0 1 ${cx + r} ${cy}" fill="none" stroke="var(--line)" stroke-width="14" stroke-linecap="round"/>
       <path d="M${cx - r} ${cy} A${r} ${r} 0 0 1 ${cx + r} ${cy}" fill="none" stroke="url(#gG)" stroke-width="14"
@@ -369,7 +375,7 @@
     const poly = keys.map((k, i) => pt(i, Math.max(0.03, (dims[k] || 0) / 100)).map((v) => v.toFixed(1)).join(',')).join(' ');
     return `<svg viewBox="0 0 300 270" class="radar">
       ${rings}${spokes}
-      <polygon points="${poly}" fill="rgba(225,29,72,.16)" stroke="var(--rose)" stroke-width="2"/>
+      <polygon points="${poly}" fill="${cssVar('--radar-fill', 'rgba(225,29,72,.16)')}" stroke="var(--rose)" stroke-width="2"/>
       ${dots}${labels}
     </svg>`;
   }
@@ -378,7 +384,8 @@
   function donut(data, opts) {
     const items = Object.entries(data || {}).sort((a, b) => b[1] - a[1]);
     const total = items.reduce((s, x) => s + x[1], 0);
-    const COLORS = ['#e11d48', '#7c3aed', '#2563eb', '#059669', '#f59e0b', '#0891b2', '#db2777', '#64748b'];
+    const COLORS = (root.CLTheme && CLTheme.chartPalette) ? CLTheme.chartPalette()
+      : ['#e11d48', '#7c3aed', '#2563eb', '#059669', '#f59e0b', '#0891b2', '#db2777', '#64748b'];
     if (!total) return '<div class="chart-empty">暂无数据</div>';
     const size = 168, r = 62, c = size / 2, circ = 2 * Math.PI * r;
     let acc = 0, arcs = '';
@@ -429,7 +436,10 @@
   /* ---------------- 头像 ---------------- */
   function avatar(name, color, size) {
     const s = size || 42;
-    const [bg, fg] = color || ['#fecdd3', '#e11d48'];
+    // color 可能是旧数据存的 [bg,fg] 数组、新版的主题色板索引（数字）或缺省
+    const pair = Array.isArray(color) ? color
+      : (root.CLTheme && CLTheme.avatarPair) ? CLTheme.avatarPair(color) : (color || ['#fecdd3', '#e11d48']);
+    const [bg, fg] = pair;
     const ch = String(name || '?').slice(0, 1);
     return `<span class="avatar" style="width:${s}px;height:${s}px;background:${bg};color:${fg};font-size:${Math.round(s * 0.42)}px">${esc(ch)}</span>`;
   }
@@ -544,9 +554,26 @@
     return { open, close, isOpen };
   }
 
+  /* 主题初始化 + 侧栏切换器接线；onChange 用于切换后重绘当前视图 */
+  function wireTheme(onChange) {
+    if (!root.CLTheme) return;
+    CLTheme.init();
+    const sel = document.querySelector('#themeSelect');
+    if (sel) {
+      const sync = () => { sel.value = CLTheme.isManual() ? CLTheme.current() : 'system'; };
+      sync();
+      sel.onchange = () => { CLTheme.apply(sel.value); };
+      CLTheme.onChange(() => setTimeout(sync, 0));
+    }
+    if (typeof onChange === 'function') CLTheme.onChange(onChange);
+  }
+
   root.UI = {
-    $, $$, esc, el, icon, toast, modal, confirmDlg, sideDrawer,
+    $, $$, esc, el, icon, toast, modal, confirmDlg, sideDrawer, wireTheme,
     trendChart, sparkline, gauge, radar, donut, bars, avatar, empty,
-    fmtDate, fmtDateFull, fmtDT, relTime, fmtNum, chipTrend, scoreClass
+    fmtDate, fmtDateFull, fmtDT, relTime, fmtNum, chipTrend, scoreClass,
+    cssVar,
+    avatarPair: (c) => (root.CLTheme && root.CLTheme.avatarPair) ? root.CLTheme.avatarPair(c)
+      : (Array.isArray(c) ? c : ['#fecdd3', '#e11d48'])
   };
 })(window);

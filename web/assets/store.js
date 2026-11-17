@@ -548,15 +548,14 @@
     bc.onmessage = (ev) => { if (ev.data) cb(ev.data); };
   }
 
-  /* ---------------- 配色 ---------------- */
-  const PALETTE = [
-    ['#fecdd3', '#e11d48'], ['#ddd6fe', '#7c3aed'], ['#bfdbfe', '#2563eb'],
-    ['#bbf7d0', '#059669'], ['#fed7aa', '#ea580c'], ['#fbcfe8', '#db2777'],
-    ['#cffafe', '#0891b2'], ['#e9d5ff', '#9333ea']
-  ];
+  /* ---------------- 配色 ----------------
+     只负责「按名字散列出一个稳定的色板索引」，真正的颜色由当前主题决定
+     （UI.avatarPair / CLTheme.avatarPair），换主题时头像跟着换。
+     旧数据里 partner.color 存的 [bg,fg] 数组仍然兼容（渲染层会原样使用）。 */
+  const PALETTE_SIZE = 8;
   function pickColor(name) {
     const h = parseInt(E.hash(String(name || 'x')).slice(0, 4), 16);
-    return PALETTE[h % PALETTE.length];
+    return h % PALETTE_SIZE;
   }
 
   /* ---------------- 示例数据 ---------------- */
