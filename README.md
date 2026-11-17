@@ -186,12 +186,12 @@ screenshots/              # 桌面版界面截图
 
 仍然是 v1.2，一个 exe，绿色便携，不需要安装、不写注册表；自己填 API Key，由模型给分，支持多模态读截图与表情包、Crush / 情侣双模式。
 
-- [GitHub Releases](https://github.com/Him-Wang/CrushLens/releases)
-- [直接下载 CrushLens.exe](https://github.com/Him-Wang/CrushLens/releases/latest/download/CrushLens.exe)
-- [下载便携包](https://github.com/Him-Wang/CrushLens/releases/latest/download/CrushLens-1.2.0-portable.zip)
-- [下载完整源码包](https://github.com/Him-Wang/CrushLens/releases/latest/download/CrushLens-v1.2.0-source.zip)
+- [全部 Releases](https://github.com/Him-Wang/CrushLens/releases)
+- [直接下载 CrushLens.exe](https://github.com/Him-Wang/CrushLens/releases/download/v1.2.0/CrushLens.exe)
+- [下载便携包](https://github.com/Him-Wang/CrushLens/releases/download/v1.2.0/CrushLens-1.2.0-portable.zip)
+- [下载完整源码包](https://github.com/Him-Wang/CrushLens/releases/download/v1.2.0/CrushLens-v1.2.0-source.zip)
 
-Release 中的 `SHA256.txt` 可用于核对文件完整性。
+桌面版文件都在 [v1.2.0 Release](https://github.com/Him-Wang/CrushLens/releases/tag/v1.2.0) 里；[latest](https://github.com/Him-Wang/CrushLens/releases/latest) 现在是最新的在线版（v2.0.0，只有 Web 包）。各 Release 都带 `SHA256.txt`，可用于核对文件完整性。
 
 ### 快速开始
 
