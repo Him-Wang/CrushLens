@@ -909,12 +909,12 @@ table.tb .num { font-variant-numeric: tabular-nums; font-weight: 600; }
 .perm-card.big { border-color: var(--rose-2); background: var(--surface); }
 
 /* ---------------- 窄屏侧栏抽屉 ---------------- */
-/* 「收起」整行按钮：只在窄屏出现，ghost 风格，不是主操作所以不用主色 */
+/* 「收起」按钮：侧栏顶部品牌行右侧，只在窄屏（抽屉模式）出现，ghost 胶囊 —— 不是主操作所以不用主色 */
 .side-close {
-  display: none; width: 100%; min-height: 44px; margin-bottom: 10px;
-  align-items: center; justify-content: center; gap: 6px; cursor: pointer;
-  font: inherit; font-size: 13.5px;
-  border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--ink-2);
+  display: none; align-items: center; gap: 4px; margin-left: auto; flex: none;
+  height: 32px; padding: 0 10px;
+  font: inherit; font-size: 12.5px; font-weight: 560; cursor: pointer;
+  border-radius: 9px; border: 1px solid var(--line); background: transparent; color: var(--ink-2);
 }
 .side-close:hover, .side-close:focus-visible { background: var(--surface-2); color: var(--ink); }
 .side-backdrop {
@@ -937,7 +937,11 @@ body.side-locked { overflow: hidden; }
     box-shadow: var(--sh-lg);
   }
   .side.open { transform: none; }
-  .side-close { display: flex; }
+  .side-close { display: inline-flex; height: 30px; padding: 0 8px; font-size: 12px; }
+  .brand { padding: 16px 16px 12px; gap: 9px; }
+  .brand-txt { min-width: 0; }
+  .brand-txt strong { font-size: 14px; }
+  .brand-txt span { font-size: 10px; letter-spacing: .05em; white-space: nowrap; }
   .main { padding: 18px 16px 60px; }
   .auth-shell { grid-template-columns: 1fr; }
   .auth-visual { display: none; }
