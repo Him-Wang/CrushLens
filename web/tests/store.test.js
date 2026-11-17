@@ -106,6 +106,18 @@ function loadStore(subtleOn) {
     removeItem: (k) => ls.delete(k)
   };
   globalThis.indexedDB = makeIDB();
+  // store.js 依赖 CLEngine.hash（取色 / 消息去重）。这里给一个等价接口的最小桩，
+  // 不加载 engine.js，避免测试把两个模块的失败混在一起。
+  if (!globalThis.CLEngine) {
+    globalThis.CLEngine = {
+      hash: (s) => {
+        s = String(s);
+        let h = 2166136261;
+        for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+        return (h >>> 0).toString(36);
+      }
+    };
+  }
   // Node 22 的 globalThis.crypto 是 getter，普通赋值会静默失败，必须 defineProperty
   Object.defineProperty(globalThis, 'crypto', {
     value: subtleOn ? webcrypto : { getRandomValues: (a) => webcrypto.getRandomValues(a) },
@@ -147,6 +159,60 @@ function loadStore(subtleOn) {
   const leak = Object.keys(r0).filter((k) => JSON.stringify(r0[k]).indexOf(acc.salt) >= 0 || JSON.stringify(r0[k]).indexOf(acc.pw) >= 0);
   ok(leak.length === 0, '任何字段值里也不含凭据片段' + (leak.length ? ('：泄漏于 ' + leak.join(',')) : ''));
   ok(r0.email === 'user@test.com' && typeof r0.partnerCount === 'number', '业务字段正常（email/partnerCount）');
+
+  /* ---------------- 3. 同名归并查询 ---------------- */
+  section('3. findPartnerByName（导入前查同名对象）');
+  const p1 = await S2.createPartner(acc.id, { name: '林晚', platform: 'wechat' });
+  await S2.createPartner(acc.id, { name: ' 林晚 ', platform: 'qq' });
+  const hit = await S2.findPartnerByName(acc.id, '林晚');
+  ok(!!hit && hit.id === p1.id, '同名（忽略首尾空格）命中已有对象');
+  ok((await S2.findPartnerByName(acc.id, '陈屿')) === null, '没有同名对象时返回 null');
+  ok((await S2.findPartnerByName(acc.id, '')) === null, '空名字返回 null（不会误命中）');
+
+  /* ---------------- 3b. findPartnersByName 返回全部同名 ---------------- */
+  section('3b. findPartnersByName（复数）');
+  await S2.createPartner(acc.id, { name: '苏禾', platform: 'wechat' });
+  await S2.createPartner(acc.id, { name: '苏禾', platform: 'qq' });
+  const multi = await S2.findPartnersByName(acc.id, '苏禾');
+  ok(multi.length === 2, '两个不同平台的「苏禾」都被返回（' + multi.length + ' 个）');
+  ok(multi.every((x) => x.name === '苏禾'), '返回的都是同名对象');
+  ok(new Set(multi.map((x) => x.platform)).size === 2, '两个平台都能区分出来');
+  ok((await S2.findPartnersByName(acc.id, '陈屿')).length === 0, '没有同名时返回空数组');
+  ok((await S2.findPartnerByName(acc.id, '苏禾')).name === '苏禾', '单数版仍返回其中一个（兼容旧调用）');
+
+  /* ---------------- 4. 会话过期 ---------------- */
+  section('4. 会话 7 天过期');
+  const KEY = 'crushlens_session_v1';
+  globalThis.localStorage.setItem(KEY, JSON.stringify({ uid: acc.id, at: Date.now() - 8 * 24 * 3600 * 1000 }));
+  ok((await S2.current()) === null, '8 天前的会话不再自动登录');
+  ok(S2.wasSessionExpired() === true, 'wasSessionExpired() 能告诉 UI 这次是过期而不是首次打开');
+  ok(globalThis.localStorage.getItem(KEY) === null, '过期会话已从 localStorage 清掉');
+  globalThis.localStorage.setItem(KEY, JSON.stringify({ uid: acc.id, at: Date.now() }));
+  ok(!!(await S2.current()), '7 天内的会话仍然有效');
+
+  /* ---------------- 4b. 会话滑动续期与标志复位 ---------------- */
+  section('4b. 会话滑动续期 / 标志复位');
+  // 2 天前的会话：有效，且读取后 at 被刷新到接近现在（滑动续期）
+  const oldAt = Date.now() - 2 * 24 * 3600 * 1000;
+  globalThis.localStorage.setItem(KEY, JSON.stringify({ uid: acc.id, at: oldAt }));
+  ok(!!(await S2.current()), '2 天前的会话有效');
+  const rolled = JSON.parse(globalThis.localStorage.getItem(KEY));
+  ok(rolled.at > oldAt, '读取有效会话后 at 已滑动续期');
+  ok((Date.now() - rolled.at) < 24 * 3600 * 1000, '续期后的 at 落在 1 天以内');
+  // 过期后重新登录：wasSessionExpired 必须复位，否则登录页会误报「已过期」
+  globalThis.localStorage.setItem(KEY, JSON.stringify({ uid: acc.id, at: Date.now() - 8 * 24 * 3600 * 1000 }));
+  await S2.current();
+  ok(S2.wasSessionExpired() === true, '再次造出过期会话');
+  await S2.login('user@test.com', 'secret123');
+  ok(S2.wasSessionExpired() === false, '登录成功后过期标志已复位');
+
+  /* ---------------- 5. 只清聊天数据 ---------------- */
+  section('5. clearChatData（保留账号）');
+  const beforeN = (await S2.listPartners(acc.id)).length;
+  const cleared = await S2.clearChatData(acc.id);
+  ok(beforeN > 0 && (await S2.listPartners(acc.id)).length === 0, '追踪对象已清空（清前 ' + beforeN + ' 个）');
+  ok(cleared.partners === beforeN, '返回被清理的对象数');
+  ok(!!(await S2.current()), '账号仍然保留，可以重新登录');
 
   console.log('\n────────────────────────────────────────────');
   console.log('结果：' + pass + ' 通过 / ' + fail + ' 失败');

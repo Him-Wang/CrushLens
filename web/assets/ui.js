@@ -20,6 +20,12 @@
     return n;
   }
 
+  /* 读当前主题的 CSS 变量（JS 生成的 SVG 内联色从这里取，换主题才不漏） */
+  function cssVar(name, fallback) {
+    if (root.CLTheme && root.CLTheme.cssVar) return root.CLTheme.cssVar(name, fallback);
+    return fallback || '';
+  }
+
   /* ---------------- 图标 ---------------- */
   const ICONS = {
     dash: 'M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z',
@@ -257,9 +263,9 @@
           <stop offset="100%" stop-color="var(--rose)" stop-opacity="0"/>
         </linearGradient>
         <linearGradient id="lineG" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stop-color="#fb7185"/>
-          <stop offset="55%" stop-color="#e11d48"/>
-          <stop offset="100%" stop-color="#9f1239"/>
+          <stop offset="0%" stop-color="${cssVar('--acc-a', '#fb7185')}"/>
+          <stop offset="55%" stop-color="${cssVar('--acc-b', '#e11d48')}"/>
+          <stop offset="100%" stop-color="${cssVar('--acc-c', '#9f1239')}"/>
         </linearGradient>
       </defs>
       ${yGrid}
@@ -327,10 +333,10 @@
     const r = 74, cx = 100, cy = 100;
     const circ = Math.PI * r;
     const pct = Math.max(0, Math.min(100, score)) / 100;
-    const col = score >= 70 ? '#e11d48' : score >= 50 ? '#f59e0b' : '#64748b';
+    const col = score >= 70 ? cssVar('--score-hi', '#e11d48') : score >= 50 ? cssVar('--score-mid', '#f59e0b') : cssVar('--score-lo', '#64748b');
     return `<svg viewBox="0 0 200 118" class="gauge" style="width:${size}px">
       <defs><linearGradient id="gG" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0%" stop-color="#fda4af"/><stop offset="100%" stop-color="${col}"/>
+        <stop offset="0%" stop-color="${cssVar('--gauge-a', '#fda4af')}"/><stop offset="100%" stop-color="${col}"/>
       </linearGradient></defs>
       <path d="M${cx - r} ${cy} A${r} ${r} 0 0 1 ${cx + r} ${cy}" fill="none" stroke="var(--line)" stroke-width="14" stroke-linecap="round"/>
       <path d="M${cx - r} ${cy} A${r} ${r} 0 0 1 ${cx + r} ${cy}" fill="none" stroke="url(#gG)" stroke-width="14"
@@ -369,7 +375,7 @@
     const poly = keys.map((k, i) => pt(i, Math.max(0.03, (dims[k] || 0) / 100)).map((v) => v.toFixed(1)).join(',')).join(' ');
     return `<svg viewBox="0 0 300 270" class="radar">
       ${rings}${spokes}
-      <polygon points="${poly}" fill="rgba(225,29,72,.16)" stroke="var(--rose)" stroke-width="2"/>
+      <polygon points="${poly}" fill="${cssVar('--radar-fill', 'rgba(225,29,72,.16)')}" stroke="var(--rose)" stroke-width="2"/>
       ${dots}${labels}
     </svg>`;
   }
@@ -378,7 +384,8 @@
   function donut(data, opts) {
     const items = Object.entries(data || {}).sort((a, b) => b[1] - a[1]);
     const total = items.reduce((s, x) => s + x[1], 0);
-    const COLORS = ['#e11d48', '#7c3aed', '#2563eb', '#059669', '#f59e0b', '#0891b2', '#db2777', '#64748b'];
+    const COLORS = (root.CLTheme && CLTheme.chartPalette) ? CLTheme.chartPalette()
+      : ['#e11d48', '#7c3aed', '#2563eb', '#059669', '#f59e0b', '#0891b2', '#db2777', '#64748b'];
     if (!total) return '<div class="chart-empty">暂无数据</div>';
     const size = 168, r = 62, c = size / 2, circ = 2 * Math.PI * r;
     let acc = 0, arcs = '';
@@ -429,7 +436,10 @@
   /* ---------------- 头像 ---------------- */
   function avatar(name, color, size) {
     const s = size || 42;
-    const [bg, fg] = color || ['#fecdd3', '#e11d48'];
+    // color 可能是旧数据存的 [bg,fg] 数组、新版的主题色板索引（数字）或缺省
+    const pair = Array.isArray(color) ? color
+      : (root.CLTheme && CLTheme.avatarPair) ? CLTheme.avatarPair(color) : (color || ['#fecdd3', '#e11d48']);
+    const [bg, fg] = pair;
     const ch = String(name || '?').slice(0, 1);
     return `<span class="avatar" style="width:${s}px;height:${s}px;background:${bg};color:${fg};font-size:${Math.round(s * 0.42)}px">${esc(ch)}</span>`;
   }
@@ -456,9 +466,114 @@
     return 'cool';
   }
 
+  /* ---------------- 窄屏侧栏抽屉 ----------------
+     980px 以下侧栏是 fixed 抽屉：必须有遮罩挡住正文的误触，
+     并且支持 × / 遮罩 / Esc 三种收起方式，打开时锁滚动、关掉后焦点还给汉堡按钮。 */
+  function sideDrawer(opts) {
+    const side = document.querySelector(opts.side);
+    const toggle = document.querySelector(opts.toggle);
+    if (!side || !toggle) return { open() { }, close() { }, isOpen: () => false };
+
+    const bd = document.createElement('div');
+    bd.className = 'side-backdrop';
+    bd.hidden = true;
+    document.body.appendChild(bd);
+
+    const mq = window.matchMedia('(max-width: 980px)');
+    let lastFocus = null;
+    let hideTimer = null;
+
+    const isOpen = () => side.classList.contains('open');
+
+    function open() {
+      if (!mq.matches || isOpen()) return;
+      lastFocus = document.activeElement;
+      side.classList.add('open');
+      toggle.setAttribute('aria-expanded', 'true');
+      bd.hidden = false;
+      // 下一帧再加 show，保证 opacity 过渡生效
+      requestAnimationFrame(() => bd.classList.add('show'));
+      document.body.classList.add('side-locked');
+      const first = side.querySelector('[data-side-close], button, a, [tabindex]');
+      if (first) { try { first.focus({ preventScroll: true }); } catch (e) { first.focus(); } }
+    }
+
+    function close() {
+      if (!isOpen()) return;
+      side.classList.remove('open');
+      toggle.setAttribute('aria-expanded', 'false');
+      bd.classList.remove('show');
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => { if (!isOpen()) bd.hidden = true; }, 260);
+      document.body.classList.remove('side-locked');
+      if (lastFocus && document.contains(lastFocus) && lastFocus.focus) {
+        try { lastFocus.focus({ preventScroll: true }); } catch (e) { /* 元素已不在，忽略 */ }
+      }
+    }
+
+    toggle.setAttribute('aria-controls', side.id || 'side');
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.onclick = () => { if (isOpen()) close(); else open(); };
+
+    // 点遮罩收起
+    bd.onclick = close;
+    // × 收起；在抽屉里点了导航/对象也收起（和移动端习惯一致）
+    side.addEventListener('click', (e) => {
+      if (e.target.closest('[data-side-close]') || e.target.closest('[data-nav]') || e.target.closest('[data-pid]')) close();
+    });
+    // Esc 收起
+    document.addEventListener('keydown', (e) => {
+      if ((e.key === 'Escape' || e.key === 'Esc') && isOpen()) { e.stopPropagation(); close(); }
+    });
+    // 焦点陷阱：抽屉开着时 Tab 只在抽屉内循环，不会跑到背后的正文里
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab' || !isOpen()) return;
+      const items = [...side.querySelectorAll('button, a[href], select, input, textarea, [tabindex]:not([tabindex="-1"])')]
+        .filter((x) => !x.disabled && x.offsetParent !== null);
+      if (!items.length) return;
+      const first = items[0], last = items[items.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !side.contains(active))) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && (active === last || !side.contains(active))) {
+        e.preventDefault(); first.focus();
+      }
+    });
+    // 拉宽回桌面尺寸时把状态清干净
+    const onChange = (ev) => {
+      if (ev.matches) return;
+      side.classList.remove('open');
+      bd.classList.remove('show');
+      bd.hidden = true;
+      toggle.setAttribute('aria-expanded', 'false');
+      document.body.classList.remove('side-locked');
+    };
+    if (mq.addEventListener) mq.addEventListener('change', onChange);
+    else if (mq.addListener) mq.addListener(onChange);
+
+    return { open, close, isOpen };
+  }
+
+  /* 主题初始化 + 侧栏切换器接线；onChange 用于切换后重绘当前视图 */
+  function wireTheme(onChange) {
+    if (!root.CLTheme) return;
+    CLTheme.init();
+    const sel = document.querySelector('#themeSelect');
+    if (sel) {
+      const sync = () => { sel.value = CLTheme.isManual() ? CLTheme.current() : 'system'; };
+      sync();
+      sel.onchange = () => { CLTheme.apply(sel.value); };
+      CLTheme.onChange(() => setTimeout(sync, 0));
+    }
+    if (typeof onChange === 'function') CLTheme.onChange(onChange);
+  }
+
   root.UI = {
-    $, $$, esc, el, icon, toast, modal, confirmDlg,
+    $, $$, esc, el, icon, toast, modal, confirmDlg, sideDrawer, wireTheme,
     trendChart, sparkline, gauge, radar, donut, bars, avatar, empty,
-    fmtDate, fmtDateFull, fmtDT, relTime, fmtNum, chipTrend, scoreClass
+    fmtDate, fmtDateFull, fmtDT, relTime, fmtNum, chipTrend, scoreClass,
+    cssVar,
+    avatarPair: (c) => (root.CLTheme && root.CLTheme.avatarPair) ? root.CLTheme.avatarPair(c)
+      : (Array.isArray(c) ? c : ['#fecdd3', '#e11d48'])
   };
 })(window);

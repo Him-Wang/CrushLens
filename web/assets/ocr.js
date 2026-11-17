@@ -8,7 +8,6 @@
   const BASE = new URL('assets/', location.href).href;
   const VENDOR = BASE + 'vendor/';
   const TESSDATA = BASE + 'tessdata/';
-  const CDN_FALLBACK = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
 
   let worker = null;
   let loading = null;

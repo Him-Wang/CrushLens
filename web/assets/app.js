@@ -5,14 +5,18 @@
   'use strict';
   const { $, $$, esc, icon, toast, modal, confirmDlg, trendChart, sparkline,
     gauge, radar, donut, bars, avatar, empty, fmtDate, fmtDateFull, fmtDT,
-    relTime, fmtNum, chipTrend, scoreClass, el } = UI;
+    relTime, fmtNum, chipTrend, scoreClass, el, sideDrawer, cssVar, avatarPair, wireTheme } = UI;
   const S = Store, E = CLEngine;
 
   const MEDIA_RE = /\[(图片|表情|语音|视频|文件|动画表情|链接|位置|红包|转账|名片|聊天记录|小程序|视频号|音乐|拍一拍)\]/g;
 
+  // 登录页也要跟随主题（含系统深色的实时切换）
+  if (window.CLTheme) CLTheme.init();
+
   const state = {
     me: null, role: null, partners: [], pid: null,
     view: 'overview', range: 30, timer: null, lastRt: null, parsed: null,
+    importingPid: null,
     bridge: {
       ok: false, needPair: false, info: null, error: null, contactsErr: null,
       apps: [], contacts: [], inboxOnly: true,
@@ -33,6 +37,9 @@
     $('#auth').hidden = false;
     $('#app').hidden = true;
     let mode = 'login';
+    if (S.wasSessionExpired && S.wasSessionExpired()) {
+      $('#authSub').textContent = '登录已过期（7 天未使用）。重新登录，之前的数据还在。';
+    }
 
     $$('.auth-tabs button').forEach((b) => {
       b.onclick = () => {
@@ -74,22 +81,55 @@
 
     $('#meName').textContent = acc.name;
     $('#meAvatar').textContent = String(acc.name || '?').slice(0, 1);
-    const c = S.pickColor(acc.name);
-    $('#meAvatar').style.background = c[0];
-    $('#meAvatar').style.color = c[1];
+    const [meBg, meFg] = avatarPair(S.pickColor(acc.name));
+    $('#meAvatar').style.background = meBg;
+    $('#meAvatar').style.color = meFg;
     $('#meRole').textContent = state.role.level === 'owner' ? '总开发者' :
       state.role.level === 'dev' ? '授权开发者' : '普通用户';
 
     $('#logoutBtn').onclick = async () => {
-      const ok = await confirmDlg({ title: '退出登录', text: '数据仍然保存在本机，下次登录还能看到。', okText: '退出' });
+      const ok = await confirmDlg({ title: '退出登录', text: '数据仍然保存在本机，下次登录还能看到。共用电脑的话，下一步可以顺手清掉本机聊天记录。', okText: '继续' });
       if (!ok) return;
+      // 三态：keep=保留数据并退出 / clear=清除并退出 / abort=算了不退
+      const choice = await new Promise((resolve) => {
+        let done = false;
+        const m = modal({
+          title: '要一并清除本机聊天数据吗？',
+          html: `<p class="muted" style="margin:0 0 6px">清除后，这台电脑上的追踪对象、聊天记录和分析报告都会删除（账号保留），无法恢复。只是换个人用的话，选「保留数据并退出」。</p>`,
+          footer: `
+            <button class="btn ghost" data-x="abort">取消</button>
+            <button class="btn ghost" data-x="keep">保留数据并退出</button>
+            <button class="btn danger" data-x="clear">清除并退出</button>`,
+          onMount(wrap) {
+            wrap.querySelectorAll('[data-x]').forEach((b) => b.onclick = () => {
+              done = true; m.close(); resolve(b.dataset.x);
+            });
+          }
+        });
+        // 点遮罩 / Esc / 右上角 × 关闭都视为「算了不退」
+        const timer = setInterval(() => {
+          if (!document.contains(m.el)) { clearInterval(timer); if (!done) resolve('abort'); }
+        }, 120);
+      });
+      if (choice !== 'keep' && choice !== 'clear') return;
+      if (choice === 'clear') {
+        try { await S.clearChatData(state.me.id); } catch (e) { /* 清失败也别把退出卡住 */ }
+      }
       stopRealtime();
       S.logout();
       location.reload();
     };
 
     $('#addPartnerBtn').onclick = () => newPartnerDialog();
-    $('#sideToggle').onclick = () => $('#side').classList.toggle('open');
+    sideDrawer({ side: '#side', toggle: '#sideToggle' });
+    wireTheme(() => {
+      const [bg, fg] = avatarPair(S.pickColor(state.me.name));
+      $('#meAvatar').style.background = bg;
+      $('#meAvatar').style.color = fg;
+      renderNav();
+      renderPartnerList();
+      if (state.view) goto(state.view);
+    });
 
     await loadPartners();
     state.bridge.links = loadLinks();
@@ -152,7 +192,7 @@
       renderPartnerList();
       if (state.view === 'overview' || state.view === 'partner') await goto('overview');
       else if (state.view === 'realtime') await goto('realtime');
-      $('#side').classList.remove('open');
+      // 窄屏抽屉的收起交给 sideDrawer 的 [data-pid] 委托（经 close()，会还原焦点与遮罩）
     });
   }
 
@@ -187,7 +227,12 @@
   }
 
   async function compute(pid) {
-    const partner = state.partners.find((p) => p.id === pid);
+    let partner = state.partners.find((p) => p.id === pid);
+    if (!partner) {
+      // 刚导入/刚创建的对象可能还没进内存列表，先刷新一次再算
+      await loadPartners();
+      partner = state.partners.find((p) => p.id === pid);
+    }
     const rows = await S.messagesOf(pid);
     const a = E.analyze(toRows(rows), { me: partner && partner.meSpeaker });
     return { a, partner, rows };
@@ -216,6 +261,33 @@
   }
 
   /* ================= 概览 ================= */
+  // 概览页内的对象切换器：让它跟侧栏一样能选人，切换后侧栏同步高亮
+  function ovSwitch(pid) {
+    if (state.partners.length < 2) return '';
+    return `<div class="ov-switch" role="tablist" aria-label="切换追踪对象">
+      ${state.partners.map((p) => {
+      const c = p.color || S.pickColor(p.name);
+      const on = p.id === pid;
+      return `<button class="ov-chip ${on ? 'active' : ''}" role="tab" aria-selected="${on}" data-switch="${p.id}"
+          title="切换到 ${esc(p.name)}">
+          ${avatar(p.name, c, 24)}
+          <span class="nm">${esc(p.name)}</span>
+          <span class="ct">${fmtNum(p.msgCount || 0)} 条</span>
+        </button>`;
+    }).join('')}
+    </div>`;
+  }
+
+  async function switchPartner(pid) {
+    if (!pid || pid === state.pid) return;
+    state.pid = pid;
+    renderPartnerList();            // 侧栏同步高亮
+    await goto('overview');
+    const main = $('#main');
+    main.classList.add('ov-enter'); // 给一个轻微的淡入，确认「已经换了」
+    setTimeout(() => main.classList.remove('ov-enter'), 420);
+  }
+
   async function viewOverview() {
     const pid = state.pid;
     if (!pid) {
@@ -227,13 +299,35 @@
     }
 
     const { a, partner } = await compute(pid);
-    if (a.empty) {
-      $('#main').innerHTML = head('概览', esc(partner.name)) +
+    if (!partner || a.empty) {
+      /* 区分「真的没有消息」和「消息还在写 / 对象刚建好」：
+         partner 缺失或 msgCount > 0 说明库里其实有东西，只是这次读到的快照还没就绪，
+         这时给骨架屏并自动重试，而不是直接甩一句「没有可分析的消息」。 */
+      const name = partner ? partner.name : '这个对象';
+      const writing = !partner || state.importingPid === pid || (partner.msgCount || 0) > 0;
+      state.ovEmptyTry = state.ovEmptyTry || {};
+      const tries = state.ovEmptyTry[pid] || 0;
+      if (writing && tries < 2) {
+        state.ovEmptyTry[pid] = tries + 1;
+        $('#main').innerHTML = head(`正在看 ${esc(name)}`, '消息刚写进来，正在整理…') +
+          `<div class="card pad center">
+            <div class="skl-line"></div>
+            <div class="skl-line" style="width:70%"></div>
+            <div class="skl-block"></div>
+            <p class="muted small">消息正在写入并计算曲线，稍等一下就好…</p>
+          </div>`;
+        setTimeout(() => {
+          if (state.view === 'overview' && state.pid === pid) viewOverview();
+        }, 600);
+        return;
+      }
+      $('#main').innerHTML = head('概览', esc(name)) +
         `<div class="card">${empty('chart', '这段记录里没有可分析的消息', '可能是格式没被识别，或者只有系统消息。',
           `<button class="btn primary" data-go="import">重新导入</button>`)}</div>`;
       bindGo();
       return;
     }
+    if (state.ovEmptyTry) delete state.ovEmptyTry[pid];
 
     if (partner.lastAnalysis !== a.total) {
       await S.updatePartner(state.me.id, pid, { lastAnalysis: a.total }).catch(() => { });
@@ -242,7 +336,7 @@
 
     const c = partner.color || S.pickColor(partner.name);
     const scores = a.daily.map((d) => d.score).filter((v) => v != null);
-    const spark = sparkline(scores.slice(-18), '#e11d48', 80, 26);
+    const spark = sparkline(scores.slice(-18), cssVar('--rose', '#e11d48'), 80, 26);
 
     const trendTone = a.momentum > 1.5 ? 'up' : a.momentum < -1.5 ? 'down' : 'flat';
     const trendIcon = a.momentum > 1.5 ? 'up' : a.momentum < -1.5 ? 'down' : 'flat';
@@ -251,19 +345,22 @@
 
     const html = `
       ${head(
-      `你好，${esc(state.me.name)}`,
-      `今天 ${fmtDateFull(Date.now())} · 正在追踪 ${state.partners.length} 段对话`,
+      `正在看 ${esc(partner.name)}`,
+      `今天 ${fmtDateFull(Date.now())} · ${esc((E.PLATFORM_META[partner.platform] || {}).label || partner.platform)} · ${fmtNum(a.count)} 条消息 · 共 ${state.partners.length} 段对话`,
       `<button class="btn ghost sm" data-go="import">${icon('plus', 14)} 导入新记录</button>`
     )}
 
+      ${ovSwitch(pid)}
+
       <div class="grid g4 mb16">
-        ${kpi('当前情感浓度', Math.round(a.total), '', `最近 ${a.spanDays} 天 · ${a.count} 条消息`, spark)}
-        ${kpi('本周变化', `${a.momentum > 0 ? '+' : ''}${a.momentum.toFixed(1)}`, '',
-      `<span class="kpi-delta ${trendTone}">${icon(trendIcon, 12)} ${a.narrative.dir}</span>`)}
-        ${kpi('覆盖天数', a.spanDays, '天', `从 ${a.firstDay.slice(5)} 到 ${a.lastDay.slice(5)}`)}
+        ${kpi('情感浓度', Math.round(a.total), '', `全部 ${fmtNum(a.count)} 条 · 覆盖 ${a.spanDays} 天`, spark)}
+        ${kpi('近期变化', `${a.momentum > 0 ? '+' : ''}${a.momentum.toFixed(1)}`, '',
+      `<span class="kpi-delta ${trendTone}">${icon(trendIcon, 12)} ${a.narrative.dir} · 近 ${a.winLen} 个活跃日 vs 前 ${a.winLen} 个</span>`)}
+        ${kpi('覆盖天数', a.spanDays, '天', `全部历史 · ${a.firstDay.slice(5)} 至 ${a.lastDay.slice(5)}`)}
         ${kpi('六维最强', a.narrative ? Object.entries(a.dims).sort((x, y) => y[1] - x[1])[0][0] : '—',
-      '', `得分 ${Object.entries(a.dims).sort((x, y) => y[1] - x[1])[0][1]}`)}
+      '', `得分 ${Object.entries(a.dims).sort((x, y) => y[1] - x[1])[0][1]} · 全量特征＋近 7 个活跃日`)}
       </div>
+      <p class="kpi-note">${icon('flat', 12)} 上方四个 KPI 是<b>全部历史</b>口径；下面的曲线、转折点与 7 天预测按右上角 <b>${state.range} 天</b> 区间显示。</p>
 
       <div class="grid g-2-1 mb16">
         <div class="card">
@@ -280,8 +377,8 @@
           <div class="card-body" id="chartBox"></div>
           <div class="card-body" style="padding-top:0;display:flex;gap:18px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-3)">
             <span class="row">${icon('flat', 13)} 逐日浓度</span>
-            <span class="row" style="color:#a1a1aa">${icon('flat', 13)} 7 日均线</span>
-            <span class="row" style="color:#7c3aed">${icon('flat', 13)} 未来 7 天预测</span>
+            <span class="row" style="color:var(--legend-ma)">${icon('flat', 13)} 7 日均线</span>
+            <span class="row" style="color:var(--violet)">${icon('flat', 13)} 未来 7 天预测</span>
             <span class="row" style="color:var(--rose)">${icon('spark', 13)} 转折点</span>
           </div>
         </div>
@@ -342,7 +439,7 @@
               ${a.forecast.map((f, i) => `
                 <div style="flex:1;min-width:62px;text-align:center;padding:9px 4px;border-radius:11px;background:var(--surface-2);border:1px solid var(--line-2)">
                   <div class="tiny muted">${f.date.slice(5)}</div>
-                  <div style="font-size:16px;font-weight:700;color:${f.score >= 60 ? '#e11d48' : f.score >= 45 ? '#b45309' : '#64748b'}">${Math.round(f.score)}</div>
+                  <div style="font-size:16px;font-weight:700;color:${f.score >= 60 ? cssVar('--fc-hi', '#e11d48') : f.score >= 45 ? cssVar('--fc-mid', '#b45309') : cssVar('--fc-lo', '#64748b')}">${Math.round(f.score)}</div>
                   <div class="tiny muted">${Math.round(f.lo)}–${Math.round(f.hi)}</div>
                 </div>`).join('')}
             </div>
@@ -368,6 +465,7 @@
         height: 300
       }));
     }
+    $$('[data-switch]').forEach((b) => b.onclick = () => switchPartner(+b.dataset.switch));
     $$('[data-range]').forEach((b) => b.onclick = () => {
       state.range = +b.dataset.range;
       viewOverview();
@@ -706,6 +804,10 @@
   }
 
   let pendingParse = null;
+  // 本次解析出的「对方是谁 / 平台」，导入时以它为准，不再隐式取当前选中对象
+  let pendingTarget = null;
+
+  const normName = (s) => String(s || '').trim().toLowerCase();
 
   /* 解码：BOM 优先，UTF-8 失败回退 GB18030。
      中文 Windows 上 QQ / 微信导出的 txt 很多是 GBK，直接按 UTF-8 读会整篇乱码。 */
@@ -723,7 +825,7 @@
     return utf8;
   }
 
-  function doParse(text, fileName) {
+  async function doParse(text, fileName) {
     const raw = text != null ? text : ($('#pasteArea') ? $('#pasteArea').value : '');
     if (!raw || raw.trim().length < 8) { toast('内容太短了，先粘一段完整的聊天记录', 'warn'); return; }
 
@@ -737,6 +839,29 @@
     const plat = E.PLATFORM_META[parsed.detected] || E.PLATFORM_META.unknown;
     const first = parsed.messages[0].time, last = parsed.messages[parsed.messages.length - 1].time;
     const speakers = parsed.speakers;
+    const meDefault = speakers.find((s) => /^(我|me|self)$/i.test(s)) || speakers[0];
+    const otherName = speakers.find((s) => s !== meDefault) || '未命名对象';
+    const platform = parsed.detected || parsed.platform;
+
+    /* 归属确认：先看有没有同名对象，再看当前选中的是不是同一个人。
+       以前这里直接用 state.pid，选中林晚却导陈屿的记录会静默混进林晚档案。 */
+    const sameNames = await S.findPartnersByName(state.me.id, otherName);
+    // 同名可能有多个（不同平台 / 不同的人）：默认目标优先同平台那个，其余照旧列在下拉里
+    const platNorm = String(platform || '').toLowerCase();
+    const sameName = sameNames.find((p) => String(p.platform || '').toLowerCase() === platNorm) || sameNames[0] || null;
+    const current = state.partners.find((p) => p.id === state.pid) || null;
+    const currentIsSame = !!(current && normName(current.name) === normName(otherName));
+    const mismatch = current && !currentIsSame ? current : null;
+    const defaultPid = sameName ? sameName.id : (currentIsSame ? current.id : 'new');
+    pendingTarget = { name: otherName, platform, mismatchName: mismatch ? mismatch.name : null };
+
+    const targetOpts = [
+      `<option value="new" ${defaultPid === 'new' ? 'selected' : ''}>＋ 新建对象「${esc(otherName)}」</option>`,
+      ...state.partners.map((p) => {
+        const hit = normName(p.name) === normName(otherName);
+        return `<option value="${p.id}" ${p.id === defaultPid ? 'selected' : ''}>${esc(p.name)}（${esc((E.PLATFORM_META[p.platform] || {}).label || p.platform)} · ${fmtNum(p.msgCount || 0)} 条）${hit ? ' · 同名合并' : ''}</option>`;
+      })
+    ].join('');
 
     const body = `
       <div class="parse-summary">
@@ -746,6 +871,17 @@
         <span><b>${parsed.messages.length}</b> 条消息</span>
         <span><b>${speakers.length}</b> 个说话人</span>
         ${first ? `<span class="muted">${fmtDateFull(first)} → ${fmtDateFull(last)}</span>` : ''}
+      </div>
+
+      ${mismatch ? `<div class="warn-box" id="targetWarn">
+        ⚠ 你当前选中的是「${esc(mismatch.name)}」，但这份记录里的对方是「${esc(otherName)}」。
+        已自动把导入目标改为「${esc(otherName)}」，<b>不会</b>写进「${esc(mismatch.name)}」的档案。
+      </div>` : ''}
+
+      <div class="field">
+        <label>导入到哪个对象</label>
+        <select class="select" id="targetSelect">${targetOpts}</select>
+        <div class="hint" id="targetHint"></div>
       </div>
 
       <div class="field">
@@ -778,6 +914,31 @@
     `;
     $('#previewBody').innerHTML = body;
     $('#confirmImport').onclick = () => runImport();
+
+    const tsel = $('#targetSelect');
+    const hint = $('#targetHint');
+    const refreshHint = () => {
+      const v = tsel.value;
+      if (v === 'new') {
+        hint.className = 'hint';
+        hint.innerHTML = sameNames.length && defaultPid !== 'new'
+          ? `已存在 ${sameNames.length} 个同名对象（${sameNames.map((x) => esc((E.PLATFORM_META[x.platform] || {}).label || x.platform)).join('、')}），建议直接合并；选「新建」会另开一份。`
+          : `将新建一个对象「${esc(otherName)}」，平台记为 ${esc(plat.label)}。`;
+        return;
+      }
+      const p = state.partners.find((x) => x.id === +v);
+      if (!p) { hint.textContent = ''; return; }
+      if (normName(p.name) !== normName(otherName)) {
+        hint.className = 'hint warn';
+        hint.innerHTML = `这份记录的对方是「${esc(otherName)}」，导进「${esc(p.name)}」会把两个人混在一起。`;
+      } else {
+        hint.className = 'hint';
+        hint.innerHTML = `已存在《${esc(p.name)} · ${fmtNum(p.msgCount || 0)} 条》，本次只补新消息，重复的会自动跳过。`;
+      }
+    };
+    tsel.onchange = refreshHint;
+    refreshHint();
+
     $('#previewCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -786,28 +947,95 @@
     if (!parsed) return;
     const btn = $('#confirmImport');
     btn.disabled = true; btn.textContent = '正在写入…';
+    const prevImporting = state.importingPid;
+
+    // 进度反馈：写入按批刷新；切到后台会提示可能被浏览器暂停
+    const pwrap = document.createElement('div');
+    pwrap.className = 'prog-wrap mt12';
+    pwrap.setAttribute('data-import-progress', '');
+    pwrap.innerHTML = `<div class="prog"><div class="prog-bar" id="impBar" style="width:2%"></div></div>
+      <div class="tiny muted mt8" id="impText">准备写入 0 / ${parsed.messages.length} 条</div>`;
+    btn.parentNode.insertBefore(pwrap, btn);
+    const pbar = pwrap.querySelector('#impBar');
+    const ptext = pwrap.querySelector('#impText');
+    const setP = (info) => {
+      if (!info) return;
+      const pct = info.total ? Math.max(2, Math.round((info.written / info.total) * 100)) : 100;
+      pbar.style.width = pct + '%';
+      ptext.textContent = `正在写入 ${info.written} / ${info.total} 条`;
+    };
+    let warnedHidden = false;
+    const onHide = () => {
+      if (document.hidden && !warnedHidden) {
+        warnedHidden = true;
+        toast('导入还没结束，先别切到后台，浏览器可能会暂停写入', 'warn');
+      }
+    };
+    document.addEventListener('visibilitychange', onHide);
 
     try {
-      let pid = state.pid;
       const meSpeaker = $('#meSelect') ? $('#meSelect').value : null;
+      const targetName = (pendingTarget && pendingTarget.name) || parsed.speakers.find((s) => s !== meSpeaker) || '未命名对象';
+      const platform = (pendingTarget && pendingTarget.platform) || parsed.platform || 'paste';
+      const tsel = $('#targetSelect');
+      const chosen = tsel ? tsel.value : 'new';
+      let pid = chosen === 'new' ? null : +chosen;
 
-      if (!pid) {
-        const name = ($('#newPName') && $('#newPName').value.trim()) || parsed.speakers.find((s) => s !== meSpeaker) || '未命名对象';
-        const mode = ($('#newPMode') && $('#newPMode').value) || 'crush';
-        const note = ($('#newPNote') && $('#newPNote').value.trim()) || '';
-        const p = await S.createPartner(state.me.id, { name, platform: parsed.platform, mode, note, meSpeaker });
-        pid = p.id;
-        state.pid = pid;
-      } else {
+      if (pid) {
+        // 用户手动把别人的记录导进当前档案 → 必须再确认一次
+        const tp = state.partners.find((x) => x.id === pid);
+        if (tp && normName(tp.name) !== normName(targetName)) {
+          const goOn = await confirmDlg({
+            title: `确认导入到「${tp.name}」？`,
+            text: `这份记录的对方是「${targetName}」，导进去会和「${tp.name}」混在同一个档案里，之后只能整份删掉重来。建议改选「新建对象」。`,
+            okText: '仍然合并'
+          });
+          if (!goOn) {
+            btn.disabled = false; btn.textContent = `确认导入 ${parsed.messages.length} 条`;
+            return;
+          }
+        }
         await S.updatePartner(state.me.id, pid, { meSpeaker }).catch(() => { });
+      } else {
+        // 「新建」也要再查一次同名，避免同一份记录被导成第二个同名对象
+        const existeds = await S.findPartnersByName(state.me.id, targetName);
+        if (existeds.length) {
+          const platNorm2 = String(platform || '').toLowerCase();
+          const existed = existeds.find((x) => String(x.platform || '').toLowerCase() === platNorm2) || existeds[0];
+          const desc = existeds.map((x) => `《${targetName} · ${(E.PLATFORM_META[x.platform] || {}).label || x.platform} · ${fmtNum(x.msgCount || 0)} 条》`).join('、');
+          const goOn = await confirmDlg({
+            title: `已经有「${targetName}」了`,
+            text: `列表里已有 ${desc}。继续新建会出现两个同名对象，曲线各算各的。要不要合并到${existeds.length > 1 ? '同平台的那个' : '已有的那个'}？`,
+            okText: '合并到已有'
+          });
+          if (goOn) {
+            pid = existed.id;
+            await S.updatePartner(state.me.id, pid, { meSpeaker }).catch(() => { });
+          }
+        }
+        if (!pid) {
+          const mode = ($('#newPMode') && $('#newPMode').value) || 'crush';
+          const note = ($('#newPNote') && $('#newPNote').value.trim()) || '';
+          const p = await S.createPartner(state.me.id, { name: targetName, platform, mode, note, meSpeaker });
+          pid = p.id;
+        }
       }
+
+      // 导入目标（新建或合并进已有对象）一律成为当前对象，
+      // 否则「查看趋势」会把用户带回导入前选中的那个人
+      state.pid = pid;
+
+      // 标记「这一份正在写」，概览据此显示骨架而不是「没有可分析的消息」
+      state.importingPid = pid;
 
       const res = await S.importMessages(state.me.id, pid, parsed, {
         source: parsed.detected || parsed.platform,
         fileName: state.fileName || (parsed.fileName || null)
-      });
+      }, setP);
 
       await loadPartners();
+      ptext.textContent = '正在计算曲线与复盘…';
+      pbar.style.width = '100%';
       const { a } = await compute(pid);
       if (!a.empty) {
         await S.saveReport(state.me.id, pid, a, modeOf(pid));
@@ -816,7 +1044,7 @@
 
       $('#previewBody').innerHTML = `
         <div class="center" style="padding:26px 8px">
-          <div class="empty-ico" style="margin:0 auto 12px;background:#ecfdf5;color:#059669">${icon('check', 24)}</div>
+          <div class="empty-ico" style="margin:0 auto 12px;background:var(--ok-bg);color:var(--ok-fg)">${icon('check', 24)}</div>
           <h3 style="font-size:16px">导入完成</h3>
           <p class="muted small mt8">新增 <b style="color:var(--ink)">${res.added}</b> 条${res.skipped ? `，跳过重复 <b style="color:var(--ink)">${res.skipped}</b> 条` : ''}</p>
           <div class="parse-summary" style="justify-content:center;margin-top:16px">
@@ -838,6 +1066,10 @@
       console.error(err);
       toast(err.message || '导入失败', 'error');
       btn.disabled = false; btn.textContent = '重试导入';
+      if (pwrap && pwrap.parentNode) pwrap.parentNode.removeChild(pwrap);
+    } finally {
+      state.importingPid = prevImporting;
+      document.removeEventListener('visibilitychange', onHide);
     }
   }
 
@@ -1367,7 +1599,7 @@
     };
 
     const appCards = (b.apps || []).map((a) => {
-      const m = appMeta[a.key] || { label: a.label, color: '#888', short: '?' };
+      const m = appMeta[a.key] || { label: a.label, color: cssVar('--ink-3', '#888'), short: '?' };
       const stateTxt = a.running ? '正在运行' : a.installed ? '已安装 · 未运行' : '未检测到';
       const dotCls = a.running ? 'live' : a.installed ? 'idle' : 'off';
       let note = '';
@@ -1390,7 +1622,7 @@
 
     const inboxCard = `<div class="appcard inbox">
       <div class="ac-top">
-        <span class="ac-ico" style="background:#fee2e2;color:#e11d48">${icon('folder', 16)}</span>
+        <span class="ac-ico" style="background:var(--rose-soft);color:var(--rose)">${icon('folder', 16)}</span>
         <div style="min-width:0">
           <div class="ac-name">投递箱<i class="dot live"></i></div>
           <div class="ac-state">${b.contacts.length} 个聊天文件 · ${b.inboxOnly ? '仅扫这一个文件夹' : '含桌面/下载'}</div>

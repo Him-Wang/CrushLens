@@ -108,12 +108,37 @@
   /* ---------------- 会话 ---------------- */
   function saveSession(uid) {
     localStorage.setItem(SESSION_KEY, JSON.stringify({ uid, at: Date.now() }));
+    // 登录/注册成功即复位过期标志，否则同一个页面生命周期里
+    // 「旧会话过期 → 重新登录」后登录页仍提示「已过期」
+    sessionExpired = false;
   }
   function clearSession() { localStorage.removeItem(SESSION_KEY); }
+
+  // 会话有效期：7 天。共用电脑上「上次登录的人永远登不出去」是安全问题。
+  const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
+  let sessionExpired = false;
+
+  // 滑动续期：会话还有效但上次活跃已超过 1 天时刷新 at，
+  // 「连续每天都在用」不会被 7 天硬上限踢出去；真正 7 天没碰才会过期
+  const SESSION_ROLL = 24 * 60 * 60 * 1000;
+
   function sessionUid() {
-    try { const s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); return s && s.uid; }
-    catch (e) { return null; }
+    try {
+      const s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+      if (!s || !s.uid) return null;
+      const age = s.at ? (Date.now() - s.at) : 0;
+      if (s.at && age > SESSION_TTL) {
+        sessionExpired = true;
+        localStorage.removeItem(SESSION_KEY);
+        return null;
+      }
+      if (!s.at || age > SESSION_ROLL) {
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ uid: s.uid, at: Date.now() }));
+      }
+      return s.uid;
+    } catch (e) { return null; }
   }
+  function wasSessionExpired() { return sessionExpired; }
 
   /* ---------------- 审计 ---------------- */
   async function log(uid, action, target, meta) {
@@ -287,6 +312,21 @@
     return rows.sort((a, b) => (b.lastMsgAt || b.createdAt) - (a.lastMsgAt || a.createdAt));
   }
 
+  // 按名字找已有对象（不看平台：同一个人换了端导入，也应该并入同一个对象）。
+  // 返回全部同名：两个不同的人恰好同名时，调用方要把平台列出来让用户挑，
+  // 不能闷头并进第一个。
+  async function findPartnersByName(uid, name) {
+    const want = String(name || '').trim().toLowerCase();
+    if (!want) return [];
+    const rows = await getAll('partners', 'uid', uid);
+    return rows.filter((p) => String(p.name || '').trim().toLowerCase() === want);
+  }
+
+  async function findPartnerByName(uid, name) {
+    const all = await findPartnersByName(uid, name);
+    return all[0] || null;
+  }
+
   async function createPartner(uid, data) {
     const p = {
       uid, name: data.name, platform: data.platform || 'paste',
@@ -324,7 +364,24 @@
   }
 
   /* ---------------- 消息导入（增量去重） ---------------- */
-  async function importMessages(uid, pid, parsed, meta) {
+  // 每 500 条一个事务：原来一条消息一个事务，1 万条要开 1 万次事务，手机上直接卡死
+  const IMPORT_BATCH = 500;
+
+  function bulkPut(rows) {
+    return db().then((d) => new Promise((resolve, reject) => {
+      if (!rows.length) { resolve(0); return; }
+      const t = d.transaction('messages', 'readwrite');
+      const s = t.objectStore('messages');
+      try {
+        for (const r of rows) s.put(r);
+      } catch (err) { reject(err); return; }
+      t.oncomplete = () => resolve(rows.length);
+      t.onerror = () => reject(t.error || new Error('写入失败'));
+      t.onabort = () => reject(t.error || new Error('写入被中断'));
+    }));
+  }
+
+  async function importMessages(uid, pid, parsed, meta, onProgress) {
     const partner = await getOne('partners', pid);
     if (!partner) throw new Error('追踪对象不存在');
     const existing = await getAll('messages', 'pid', pid);
@@ -341,9 +398,16 @@
       added++;
     }
 
-    for (const row of toAdd) await add('messages', row);
+    // 攒批写入，每批回报一次进度（已写 / 本次总数）
+    let written = 0;
+    if (onProgress) { try { onProgress({ written: 0, total: toAdd.length }); } catch (e) { } }
+    for (let i = 0; i < toAdd.length; i += IMPORT_BATCH) {
+      const slice = toAdd.slice(i, i + IMPORT_BATCH);
+      await bulkPut(slice);
+      written += slice.length;
+      if (onProgress) { try { onProgress({ written, total: toAdd.length }); } catch (e) { } }
+    }
 
-    const all = existing.concat(toAdd.map((r, i) => ({ ...r, id: 'tmp' + i })));
     const times = toAdd.map((r) => r.ts);
     const firstAt = Math.min(partner.firstMsgAt || Infinity, ...(times.length ? times : [Infinity]));
     const lastAt = Math.max(partner.lastMsgAt || 0, ...(times.length ? times : [0]));
@@ -484,15 +548,14 @@
     bc.onmessage = (ev) => { if (ev.data) cb(ev.data); };
   }
 
-  /* ---------------- 配色 ---------------- */
-  const PALETTE = [
-    ['#fecdd3', '#e11d48'], ['#ddd6fe', '#7c3aed'], ['#bfdbfe', '#2563eb'],
-    ['#bbf7d0', '#059669'], ['#fed7aa', '#ea580c'], ['#fbcfe8', '#db2777'],
-    ['#cffafe', '#0891b2'], ['#e9d5ff', '#9333ea']
-  ];
+  /* ---------------- 配色 ----------------
+     只负责「按名字散列出一个稳定的色板索引」，真正的颜色由当前主题决定
+     （UI.avatarPair / CLTheme.avatarPair），换主题时头像跟着换。
+     旧数据里 partner.color 存的 [bg,fg] 数组仍然兼容（渲染层会原样使用）。 */
+  const PALETTE_SIZE = 8;
   function pickColor(name) {
     const h = parseInt(E.hash(String(name || 'x')).slice(0, 4), 16);
-    return PALETTE[h % PALETTE.length];
+    return h % PALETTE_SIZE;
   }
 
   /* ---------------- 示例数据 ---------------- */
@@ -585,14 +648,31 @@
     await log(uid, 'wipe_account', '', { partners: ps.length, reports: rs.length });
   }
 
+  // 只清本机聊天数据，保留账号与审计日志（退出登录时的可选项）
+  async function clearChatData(uid) {
+    const ps = await listPartners(uid);
+    let msgs = 0;
+    for (const p of ps) {
+      const m = await getAll('messages', 'pid', p.id);
+      msgs += m.length;
+      for (const x of m) await del('messages', x.id);
+      for (const b of await getAll('batches', 'pid', p.id)) await del('batches', b.id);
+      for (const r of await getAll('reports', 'pid', p.id)) await del('reports', r.id);
+      await del('partners', p.id);
+    }
+    await log(uid, 'clear_chat_data', '', { partners: ps.length, msgs });
+    broadcast('messages-changed', { pid: null, added: 0 });
+    return { partners: ps.length, msgs };
+  }
+
   root.Store = {
-    signup, login, logout, current, sessionUid,
+    signup, login, logout, current, sessionUid, wasSessionExpired,
     roleOf, ownerUid, claimOwner, grantsOf, issueGrant, revokeGrant,
     requestAccess, decideRequest,
-    listPartners, createPartner, updatePartner, deletePartner,
+    listPartners, findPartnerByName, findPartnersByName, createPartner, updatePartner, deletePartner,
     importMessages, messagesOf, batchesOf, saveReport, reportsOf,
     adminOverview, adminUserRows, log,
-    broadcast, onBroadcast, seedDemo, wipeAccount,
+    broadcast, onBroadcast, seedDemo, wipeAccount, clearChatData,
     getMeta, setMeta, pickColor,
     raw: { getAll, getOne, put, add, del }
   };

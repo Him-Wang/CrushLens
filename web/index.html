@@ -6,6 +6,13 @@
 <title>心动镜 · 情感浓度追踪</title>
 <meta name="description" content="从聊天记录里看见情感浓度的变化趋势，复盘过去，预测接下来七天。">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%23e11d48'/><path d='M50 78S22 60 22 42a15 15 0 0 1 28-7 15 15 0 0 1 28 7c0 18-28 36-28 36Z' fill='white'/></svg>">
+<meta name="theme-color" content="#faf8f7">
+<script>
+/* 防闪烁：绘制前先把主题挂上，刷新不会闪一下默认色 */
+(function(){try{var t=localStorage.getItem('cl_theme');
+if(!t||['rose','mist','matcha','dusk','night'].indexOf(t)<0){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'night':'rose';}
+document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','rose');}})();
+</script>
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -122,6 +129,21 @@
     <div class="plist" id="plist"></div>
 
     <div class="side-foot">
+      <div class="theme-row">
+        <span>主题</span>
+        <select id="themeSelect" aria-label="主题">
+          <option value="system">跟随系统</option>
+          <option value="rose">玫瑰</option>
+          <option value="mist">雾蓝</option>
+          <option value="matcha">抹茶</option>
+          <option value="dusk">黄昏</option>
+          <option value="night">夜间</option>
+        </select>
+      </div>
+      <button class="side-close" data-side-close aria-label="收起侧边栏" title="收起侧边栏">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+        <span>收起</span>
+      </button>
       <div class="userchip">
         <span class="avatar" id="meAvatar" style="width:32px;height:32px;font-size:13px"></span>
         <div style="min-width:0">
@@ -141,6 +163,7 @@
 <script src="assets/engine.js"></script>
 <script src="assets/ocr.js"></script>
 <script src="assets/store.js"></script>
+<script src="assets/theme.js"></script>
 <script src="assets/ui.js"></script>
 <script src="assets/app.js"></script>
 </body>
