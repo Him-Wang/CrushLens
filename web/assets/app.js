@@ -1,13 +1,16 @@
 /* ============================================================
  * CrushLens Cloud · 用户端
  * ============================================================ */
-(function () {
+(function (root) {
   'use strict';
   const { $, $$, esc, icon, toast, modal, confirmDlg, trendChart, sparkline,
     gauge, radar, donut, bars, avatar, empty, fmtDate, fmtDateFull, fmtDT,
     relTime, fmtNum, chipTrend, scoreClass, el, sideDrawer, cssVar, avatarPair,
     wireTheme, wireThemeSelects } = UI;
-  const S = Store, E = CLEngine;
+  const S = Store, E = CLEngine, Api = root.CLApi, M = root.Model;
+
+  // 草稿：注册/导入过程中切到演示再回来，草稿不丢（T3 验收）
+  const draft = { email: '', name: '', pass: '' };
 
   const MEDIA_RE = /\[(图片|表情|语音|视频|文件|动画表情|链接|位置|红包|转账|名片|聊天记录|小程序|视频号|音乐|拍一拍)\]/g;
 
@@ -25,13 +28,168 @@
     }
   };
 
+  /* ================= 主题面板 + 昼夜滑块（T7.2） ================= */
+  const THEME_DOTS = [
+    { id: 'rose', color: '#e11d48', label: '玫瑰' },
+    { id: 'mist', color: '#2563eb', label: '雾蓝' },
+    { id: 'matcha', color: '#059669', label: '抹茶' },
+    { id: 'dusk', color: '#ea580c', label: '黄昏' },
+    { id: 'night', color: '#1e293b', label: '夜间' }
+  ];
+
+  function wireThemePanel() {
+    const panel = $('#themePanel'), fab = $('#themeFab'), dots = $('#tpDots');
+    if (!panel || !fab || !dots) return;
+    if (!dots.dataset.built) {
+      dots.innerHTML = THEME_DOTS.map((t) =>
+        `<button class="tp-dot" data-theme-id="${t.id}" title="${t.label}" aria-label="${t.label}" style="background:${t.color}"></button>`).join('');
+      dots.dataset.built = '1';
+      $$('.tp-dot').forEach((b) => b.onclick = () => {
+        CLTheme.apply(b.dataset.themeId);
+        toast('主题：' + THEME_DOTS.find((t) => t.id === b.dataset.themeId).label);
+        renderThemePanelState();
+      });
+      $('#tpFollow').onclick = () => { CLTheme.apply('system'); toast('已跟随系统'); renderThemePanelState(); syncDayNight(); };
+    }
+    const toggle = (force) => {
+      const show = force === undefined ? panel.hidden : force;
+      panel.hidden = !show;
+      if (show) renderThemePanelState();
+    };
+    fab.onclick = () => toggle();
+    fab.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
+    document.addEventListener('click', (e) => {
+      if (panel.hidden) return;
+      if (!panel.contains(e.target) && e.target !== fab && !fab.contains(e.target)) toggle(false);
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) toggle(false); });
+    renderThemePanelState();
+  }
+
+  function renderThemePanelState() {
+    const manual = CLTheme.isManual(), cur = CLTheme.current();
+    $$('.tp-dot').forEach((b) => b.classList.toggle('active', manual && b.dataset.themeId === cur));
+    const f = $('#tpFollow'); if (f) f.classList.toggle('active', !manual);
+  }
+
+  // 昼夜滑块：左=浅色(rose) 中=跟随系统 右=深色(night)，拖动即时生效并持久化
+  function syncDayNight() {
+    const d = $('#daynight'); if (!d) return;
+    const manual = CLTheme.isManual(), cur = CLTheme.current();
+    const pos = !manual ? 1 : (cur === 'night' ? 2 : 0);
+    d.dataset.pos = String(pos);
+    d.setAttribute('aria-valuenow', String(pos));
+    $('#dnLabel').textContent = !manual ? '跟随系统' : (cur === 'night' ? '深色' : '浅色');
+  }
+  function wireDayNight() {
+    const d = $('#daynight'); if (!d || d.dataset.bound) return;
+    d.dataset.bound = '1';
+    let dragging = false;
+    const applyX = (clientX) => {
+      const r = d.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+      const pos = ratio < 0.33 ? 0 : ratio > 0.67 ? 2 : 1;
+      d.dataset.pos = String(pos);
+      d.setAttribute('aria-valuenow', String(pos));
+      $('#dnLabel').textContent = pos === 1 ? '跟随系统' : (pos === 2 ? '深色' : '浅色');
+      if (pos === 1) CLTheme.apply('system');
+      else CLTheme.apply(pos === 2 ? 'night' : 'rose');
+      renderThemePanelState();
+    };
+    d.addEventListener('pointerdown', (e) => { dragging = true; d.setPointerCapture(e.pointerId); applyX(e.clientX); });
+    d.addEventListener('pointermove', (e) => { if (dragging) applyX(e.clientX); });
+    d.addEventListener('pointerup', () => { dragging = false; });
+    d.addEventListener('keydown', (e) => {
+      let pos = +d.dataset.pos;
+      if (e.key === 'ArrowLeft') pos = Math.max(0, pos - 1);
+      else if (e.key === 'ArrowRight') pos = Math.min(2, pos + 1);
+      else if (e.key === 'Enter' || e.key === ' ') pos = (pos + 1) % 3;
+      else return;
+      e.preventDefault();
+      d.dataset.pos = String(pos);
+      $('#dnLabel').textContent = pos === 1 ? '跟随系统' : (pos === 2 ? '深色' : '浅色');
+      if (pos === 1) CLTheme.apply('system'); else CLTheme.apply(pos === 2 ? 'night' : 'rose');
+      renderThemePanelState();
+    });
+    syncDayNight();
+    CLTheme.onChange(syncDayNight);
+  }
+
   /* ================= 启动 ================= */
   boot();
 
   async function boot() {
+    // GitHub 回调：Worker 通过 302 带回会话 Cookie，这里用 /me 感知登录态
+    if (location.search.indexOf('gh=1') >= 0) {
+      history.replaceState({}, '', location.pathname);
+      if (Api && Api.configured()) {
+        try {
+          const r = await Api.me();
+          if (r && r.account) {
+            const acc = await S.upsertCloudAccount(r.account);
+            await afterCloudLogin(acc, r.account);
+            return;
+          }
+        } catch (e) { /* 落到下面正常登录页 */ }
+      }
+    }
+    if (S.isDemo && S.isDemo() && sessionStorage.getItem('cl_demo') === '1') {
+      // 演示态刷新：离开演示、回登录页，IndexedDB 仍是空的
+      S.leaveDemo && S.leaveDemo();
+      document.body.classList.remove('demo-mode');
+    }
     const me = await S.current();
     if (me) enter(me);
     else showAuth();
+  }
+
+  // 云端登录后：把本地 uid 从访客态合并到云账号 id，再进入应用
+  async function afterCloudLogin(acc, profile) {
+    const oldUid = S.sessionUid && S.sessionUid();
+    if (oldUid && oldUid !== acc.id) {
+      try {
+        const r = await S.migrateUid(oldUid, acc.id);
+        if (r && r.moved) toast('已把本机的 ' + r.moved + ' 条记录并入云端账号');
+      } catch (e) { toast('本机数据合并失败，原数据仍在：' + e.message, 'warn'); }
+    }
+    if (Api && Api.configured() && profile) {
+      const n = (await S.listPartners(acc.id)).length;
+      Api.syncCounts(n).catch(() => { });
+    }
+    await enter(acc);
+    toast('已登录');
+  }
+
+  function setAuthErr(msg) { const el = $('#authErr'); if (el) el.textContent = msg || ''; }
+
+  function applyAuthMode(mode) {
+    const signup = mode === 'signup';
+    $$('.auth-tabs button').forEach((x) => x.classList.toggle('active', x.dataset.tab === mode));
+    $('#nameField').hidden = !signup;
+    $('#codeField').hidden = !signup;
+    $('#confirmField').hidden = !signup;
+    $('#authTitle').textContent = signup ? '创建你的账号' : '欢迎回来';
+    $('#authSub').textContent = signup ? '注册需要邮箱验证码，聊天记录仍然只在本机' : '登录后继续追踪你的对话曲线';
+    $('#authSubmit').textContent = signup ? '注册并进入' : '登录';
+    $('#fPass').autocomplete = signup ? 'new-password' : 'current-password';
+    $('#fPass2').value = '';
+    setAuthErr('');
+    validateConfirm();
+  }
+
+  // 确认密码：不一致 → 两边标红、禁用提交、不发请求；都空也算不一致
+  function validateConfirm() {
+    const signup = $$('.auth-tabs button.active')[0] && $$('.auth-tabs button.active')[0].dataset.tab === 'signup';
+    if (!signup) return true;
+    const a = $('#fPass').value, b = $('#fPass2').value;
+    const bothEmpty = !a && !b;
+    const mismatch = a !== b;
+    const bad = bothEmpty || mismatch;
+    $('#fPass').classList.toggle('bad', bad);
+    $('#fPass2').classList.toggle('bad', bad);
+    $('#authSubmit').disabled = bad;
+    setAuthErr(bad ? (bothEmpty ? '请输入密码并确认' : '两次输入不一致') : '');
+    return !bad;
   }
 
   function showAuth() {
@@ -41,37 +199,124 @@
     if (S.wasSessionExpired && S.wasSessionExpired()) {
       $('#authSub').textContent = '登录已过期（7 天未使用）。重新登录，之前的数据还在。';
     }
+    $('#fEmail').value = draft.email;
+    $('#fName').value = draft.name;
+    $('#fPass').value = draft.pass;
+    applyAuthMode(mode);
 
     $$('.auth-tabs button').forEach((b) => {
-      b.onclick = () => {
-        mode = b.dataset.tab;
-        $$('.auth-tabs button').forEach((x) => x.classList.toggle('active', x === b));
-        $('#nameField').hidden = mode === 'login';
-        $('#authTitle').textContent = mode === 'login' ? '欢迎回来' : '创建你的账号';
-        $('#authSub').textContent = mode === 'login' ? '登录后继续追踪你的对话曲线' : '30 秒完成，数据只存在这台设备';
-        $('#authSubmit').textContent = mode === 'login' ? '登录' : '注册并进入';
-        $('#fPass').autocomplete = mode === 'login' ? 'current-password' : 'new-password';
-        $('#authErr').textContent = '';
-      };
+      b.onclick = () => { mode = b.dataset.tab; applyAuthMode(mode); };
     });
+    ['#fEmail', '#fName', '#fPass'].forEach((sel) => {
+      $(sel).addEventListener('input', () => {
+        draft.email = $('#fEmail').value; draft.name = $('#fName').value; draft.pass = $('#fPass').value;
+      });
+    });
+    $('#fPass2').addEventListener('input', validateConfirm);
+
+    // GitHub 登录（主入口）
+    $('#ghBtn').onclick = () => {
+      if (!Api || !Api.configured()) {
+        setAuthErr('还没有配置云端接口地址。请在「先不登录，本地用」进入后到 设置 → 模型与云端 填写 Worker 地址。');
+        return;
+      }
+      try { Api.githubLogin(); } catch (e) { setAuthErr(e.message); }
+    };
+
+    // 发送邮箱验证码
+    $('#sendCodeBtn').onclick = async () => {
+      const email = $('#fEmail').value.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setAuthErr('先填好邮箱'); return; }
+      if (!Api || !Api.configured()) { setAuthErr('还没配置云端接口地址'); return; }
+      const btn = $('#sendCodeBtn'); const old = btn.textContent;
+      btn.disabled = true; btn.textContent = '发送中…';
+      try {
+        const r = await Api.sendCode(email);
+        toast(r.sent ? '验证码已发送，查收邮箱' : ('验证码已生成：' + (r.devCode || '') + '（' + (r.reason || '未配置邮件服务') + '）'), r.sent ? '' : 'warn');
+      } catch (e) { setAuthErr(e.message); }
+      finally { btn.disabled = false; btn.textContent = old; }
+    };
+
+    // 先看看效果（T3）：进入纯内存演示，不碰 IndexedDB
+    $('#demoBtn').onclick = () => enterDemoMode();
+
+    // 先不登录，本地用（T8）：建一个 provider:'local' 的本地账号
+    $('#localBtn').onclick = async () => {
+      try {
+        let acc = await S.current();
+        if (!acc) {
+          const all = await S.raw.getAll('accounts');
+          acc = all.find((a) => a.provider === 'local') || null;
+          if (!acc) {
+            acc = { id: 'local_' + Date.now(), email: '', name: '本机用户', provider: 'local',
+              salt: null, pw: null, pwAlg: null, createdAt: Date.now(), lastLogin: Date.now(), loginCount: 1 };
+            acc.id = await S.raw.add('accounts', acc);
+          }
+          localStorage.setItem('crushlens_session_v1', JSON.stringify({ uid: acc.id, at: Date.now() }));
+        }
+        await enter(acc);
+        toast('本机模式：数据只存在这台设备');
+      } catch (e) { setAuthErr(e.message); }
+    };
 
     $('#authForm').onsubmit = async (e) => {
       e.preventDefault();
+      if (mode === 'signup' && !validateConfirm()) return;
       const email = $('#fEmail').value.trim();
       const pass = $('#fPass').value;
       const name = $('#fName').value.trim();
+      const code = $('#fCode').value.trim();
+      draft.email = email; draft.name = name; draft.pass = pass;
+      if (mode === 'signup' && pass.length < 8) { setAuthErr('密码至少 8 位'); return; }
       $('#authErr').textContent = '';
       $('#authSubmit').disabled = true;
       try {
-        const acc = mode === 'login' ? await S.login(email, pass) : await S.signup(email, pass, name);
-        await enter(acc);
+        let acc, profile = null;
+        if (Api && Api.configured()) {
+          // 云端注册/登录：拉伸在浏览器，Worker 只做一次 HMAC
+          const r = mode === 'login' ? await Api.login(email, pass) : await Api.register(email, code, pass, name);
+          profile = r.account;
+          acc = await S.upsertCloudAccount(profile);
+        } else {
+          // 未配置云端时，注册/登录退回本机 IndexedDB（零成本、离线可用）
+          acc = mode === 'login' ? await S.login(email, pass) : await S.signup(email, pass, name);
+        }
+        if (mode === 'signup' && Api && Api.configured()) await afterCloudLogin(acc, profile);
+        else await enter(acc);
         toast(mode === 'login' ? '欢迎回来' : '账号已创建');
       } catch (err) {
-        $('#authErr').textContent = err.message || '出错了，再试一次';
+        setAuthErr(err.message || '出错了，再试一次');
       } finally {
         $('#authSubmit').disabled = false;
+        validateConfirm();
       }
     };
+  }
+
+  /* ================= 演示模式（T3） ================= */
+  async function enterDemoMode() {
+    const acc = S.enterDemo();
+    document.body.classList.add('demo-mode');
+    $('#demoBanner').hidden = false;
+    // 演示里允许当前账号为空的概览：state.pid 交给各视图；role 给普通用户
+    state.me = acc;
+    state.role = { level: 'user', permanent: false };
+    state.demo = true;
+    await enter(acc);
+    $('#demoBanner').hidden = false;
+  }
+  function leaveDemoToRegister() {
+    S.leaveDemo();
+    document.body.classList.remove('demo-mode');
+    $('#demoBanner').hidden = true;
+    state.demo = false;
+    state.me = null; state.partners = []; state.pid = null;
+    showAuth();
+    $$('.auth-tabs button').find((b) => b.dataset.tab === 'signup').click();
+    // 草稿保留
+    $('#fEmail').value = draft.email; $('#fName').value = draft.name; $('#fPass').value = draft.pass;
+    validateConfirm();
+    toast('已退出演示，填写信息即可开始记录');
   }
 
   async function enter(acc) {
@@ -127,8 +372,12 @@
       $('#meAvatar').style.color = fg;
       renderNav();
       renderPartnerList();
+      syncDayNight();
       if (state.view) goto(state.view, { quiet: true });
     });
+    wireThemePanel();
+    wireDayNight();
+    $('#demoRegisterBtn').onclick = leaveDemoToRegister;
 
     await loadPartners();
     state.bridge.links = loadLinks();
@@ -154,7 +403,8 @@
     { id: 'import', label: '导入记录', icon: 'import' },
     { id: 'realtime', label: '实时监测', icon: 'radio' },
     { id: 'reports', label: '复盘报告', icon: 'report' },
-    { id: 'usage', label: '使用记录', icon: 'folder' }
+    { id: 'usage', label: '使用记录', icon: 'folder' },
+    { id: 'settings', label: '设置', icon: 'key' }
   ];
 
   function renderNav() {
@@ -170,7 +420,7 @@
     const box = $('#plist');
     if (!state.partners.length) {
       box.innerHTML = `<div style="padding:14px 10px;font-size:12px;color:var(--ink-3);line-height:1.7">
-        还没有追踪对象。<br>导入一段聊天记录就会自动创建。</div>`;
+        这台设备上还没有导入记录。<br>导入一段聊天记录就会自动创建追踪对象。</div>`;
       return;
     }
     box.innerHTML = state.partners.map((p) => {
@@ -209,6 +459,7 @@
       else if (view === 'realtime') await viewRealtime();
       else if (view === 'reports') await viewReports();
       else if (view === 'usage') await viewUsage();
+      else if (view === 'settings') await viewSettings();
       else if (view === 'partner') await viewPartner();
     } catch (err) {
       console.error(err);
@@ -235,6 +486,7 @@
       partner = state.partners.find((p) => p.id === pid);
     }
     const rows = await S.messagesOf(pid);
+    state._lastRows = rows; // 供 AI 摘要使用（原文默认不外发）
     const a = E.analyze(toRows(rows), { me: partner && partner.meSpeaker });
     return { a, partner, rows };
   }
@@ -293,7 +545,7 @@
     const pid = state.pid;
     if (!pid) {
       $('#main').innerHTML = head('概览', '先导入一段聊天记录，才能开始追踪') +
-        `<div class="card">${empty('import', '还没有任何数据', '支持微信、QQ、钉钉、WhatsApp 导出的 txt / json，也可以直接粘贴。',
+        `<div class="card">${empty('import', '这台设备上还没有导入记录', '换设备登录后本机数据是空的，这是正常的；导入聊天记录后即可开始追踪。支持 txt / json，也可以直接粘贴。',
           `<button class="btn primary" data-go="import">去导入</button>`)}</div>`;
       bindGo();
       return;
@@ -405,6 +657,8 @@
         </div>
       </div>
 
+      ${aiBubbleHtml()}
+
       <div class="grid g-1-2">
         <div class="card">
           <div class="card-head"><div><h3>六维结构</h3><div class="sub">最近 7 天窗口</div></div></div>
@@ -472,6 +726,7 @@
       viewOverview();
     });
     $$('[data-report]').forEach((b) => b.onclick = () => openReport(pid));
+    bindAiBubble(pid, a, partner);
 
     const batches = await S.batchesOf(pid);
     const mini = $('#batchMini');
@@ -1297,12 +1552,22 @@
     const headers = {};
     const tk = getToken();
     if (tk) headers['X-Bridge-Token'] = tk;
-    const r = await fetch(BRIDGE_BASE + path, {
-      method: o.method || 'GET',
-      cache: 'no-store',
-      headers,
-      signal: timeoutSignal(o.ms || 4000)
-    });
+    let r;
+    try {
+      r = await fetch(BRIDGE_BASE + path, {
+        method: o.method || 'GET',
+        cache: 'no-store',
+        headers,
+        signal: timeoutSignal(o.ms || 4000)
+      });
+    } catch (err) {
+      // T2：把 fetch 的几种失败拆成可识别的 code，供 UI 给出四套不同文案
+      const coded = new Error(err && err.message ? err.message : 'fetch failed');
+      if (err && err.name === 'AbortError') coded.code = 'timeout';
+      else if (err && /Failed to fetch|NetworkError|Load failed/i.test(err.message || '')) coded.code = 'FETCH_FAILED';
+      else coded.code = 'ERR_CONNECTION_REFUSED';
+      throw coded;
+    }
     if (r.status === 401) {
       const err = new Error('unauthorized');
       err.code = 401;
@@ -1333,7 +1598,7 @@
       await bFetch('/api/ping', { ms: 2500, method: 'GET' });
     } catch (err) {
       b.ok = false; b.info = null; b.needPair = false;
-      b.error = err && err.name === 'AbortError' ? 'timeout' : (err.message || 'unreachable');
+      b.error = err && err.code ? err.code : (err && err.name === 'AbortError' ? 'timeout' : (err.message || 'unreachable'));
       return false;
     }
     // 2) 有 Token 才算真正连上
@@ -1494,6 +1759,23 @@
     inp.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
   }
 
+  /* ---------- T2：四种失败态，各自不同的文案与下一步 ---------- */
+  function bridgeErrorHtml() {
+    const e = state.bridge.error;
+    if (!e) return '';
+    if (e === 401 || e === '401') {
+      return `<div class="bridge-warn b-paired mt12">${icon('lock', 14)} <b>助手在运行，但还没配对。</b>助手每次启动会生成新的 6 位配对码，显示在它的黑色窗口第一行。点下方「我下载好了，现在连接」输入配对码即可。</div>`;
+    }
+    if (e === 'timeout') {
+      return `<div class="bridge-warn mt12">${icon('clock', 14)} <b>请求超时了。</b>通常是 17321 端口被别的程序占用，或防火墙拦住了本机连接。先关掉可能占用端口的程序，再确认防火墙允许「心动镜连接助手」，然后点「重新检测」。</div>`;
+    }
+    if (e === 'FETCH_FAILED') {
+      return `<div class="bridge-warn b-cors mt12">${icon('alert', 14)} <b>浏览器拦住了这个本机地址。</b>Chrome / Edge 的「本地网络访问」权限没有放行 127.0.0.1。请在地址栏左侧的站点设置里把「本地网络访问」改为允许，然后点「重试连接」。<br><span class="tiny">如果助手根本没启动，也会看到同样的提示——请先双击「启动助手.bat」再重试。</span><button class="btn ghost sm" id="bRetryLocalNet" style="display:block;margin-top:8px">${icon('refresh', 13)} 重试连接</button></div>`;
+    }
+    // ERR_CONNECTION_REFUSED 及其它：助手没启动
+    return `<div class="bridge-warn mt12">${icon('alert', 14)} <b>助手还没有启动。</b>点击下面的绿色按钮下载压缩包，解压后双击里面的「启动助手.bat」，看到黑色窗口里出现 6 位配对码就算成功。</div>`;
+  }
+
   /* ---------- 未连接：引导 ---------- */
   function localOfflineHtml() {
     const b = state.bridge;
@@ -1508,11 +1790,7 @@
             <b>不联网、不上传、不写注册表</b>。它会帮你把电脑上的聊天记录来源整理成「联系人列表」，
             你在这页点一下名字就导进来了。
           </p>
-          ${b.error === 'timeout'
-      ? `<div class="bridge-warn mt12">${icon('clock', 14)} 请求超时了。可能是浏览器拦住了本机地址，试试用 Edge / Chrome 打开。</div>`
-      : b.ok === false && b.error
-        ? `<div class="bridge-warn mt12">${icon('alert', 14)} 连不上，一般就两个原因：① 助手还没启动（双击启动助手.bat）；② 浏览器在等你授权——留意有没有弹出「允许访问你的本地网络」，点【允许】再点「重新检测」。</div>`
-        : ''}
+          ${bridgeErrorHtml()}
         </div>
       </div>
 
@@ -1521,16 +1799,12 @@
       <div class="steps3 mb16">
         <div class="st">
           <span class="n">1</span>
-          <h4>下载助手</h4>
-          <p>两个小文件，加起来几十 KB。下到同一个文件夹里。</p>
-          <div class="row" style="gap:8px;flex-wrap:wrap">
-            <a class="btn primary sm" href="assistant/启动助手.bat" download>${icon('import', 14)} 启动助手.bat</a>
-            <a class="btn ghost sm" href="assistant/连接助手.ps1" download>连接助手.ps1</a>
-          </div>
-          <div class="tiny muted mt8">浏览器可能会把 <code>.bat</code> 当成危险文件拦一下，选「保留」即可。
-            如果只下到了 <code>.ps1</code>，也可以在它所在的文件夹打开命令行输入：
-          </div>
-          <div class="code-box mt8">powershell -ExecutionPolicy Bypass -File .\连接助手.ps1</div>
+          <h4>下载助手（v2）</h4>
+          <p>下载压缩包，里面已含启动器，解压到任意文件夹即可。</p>
+          <a class="bridge-dl-primary" href="assistant/心动镜连接助手-v2.zip" download="心动镜连接助手-v2.zip">${icon('import', 15)} 下载连接助手 v2（zip，含启动器）</a>
+          <div class="tiny muted mt8">下载完成后文件在你的「下载」文件夹里，解压后双击即可。浏览器若提示保留，选「保留」。</div>
+          <div class="bridge-sub-links">只要单个文件：<a href="assistant/连接助手.ps1" download="连接助手.ps1">连接助手.ps1</a> ·
+            <a href="assistant/启动助手.bat" download="启动助手.bat">启动助手.bat</a></div>
         </div>
         <div class="st">
           <span class="n">2</span>
@@ -1541,10 +1815,11 @@
         </div>
         <div class="st">
           <span class="n">3</span>
-          <h4>回来输入配对码</h4>
-          <p>点下面按钮重新检测，页面会出现输入框，把窗口里那 6 位数字填进去就接上了。
-            第一次连接时浏览器可能还会问「<b>允许访问你的本地网络</b>」——点【允许】。</p>
-          <button class="btn ghost sm" id="bRetry">${icon('refresh', 14)} 我点过了，再检测一次</button>
+          <h4>我下载好了，现在连接</h4>
+          <p>点下面按钮，页面先探测助手是否已启动，然后让你输入那 6 位配对码即可接通。</p>
+          <button class="btn primary sm" id="bGotIt">${icon('wifi', 14)} 我下载好了，现在连接</button>
+          <div class="tiny muted mt8" style="margin-top:8px">如果 Windows / 浏览器问「允许访问你的本地网络」，点【允许】。</div>
+          <div class="bridge-sub-links" style="margin-top:8px">微信记录读取器：<a href="tools/wechat-reader/心动镜微信记录读取器-v1.0.0.zip" download="心动镜微信记录读取器-v1.0.0.zip">下载 v1.0.0（约 40KB）</a></div>
         </div>
       </div>
 
@@ -1580,6 +1855,23 @@
     if (r) r.onclick = async () => {
       r.disabled = true; r.textContent = '检测中…';
       await viewLocal();
+    };
+    const rl = $('#bRetryLocalNet');
+    if (rl) rl.onclick = async () => {
+      rl.disabled = true; rl.textContent = '重试中…';
+      await viewLocal();
+    };
+    // T2：先探活 /api/ping，通了就进配对界面，否则给出对应失败态
+    const got = $('#bGotIt');
+    if (got) got.onclick = async () => {
+      got.disabled = true; const old = got.textContent; got.textContent = '检测助手中…';
+      const ok = await bridgeProbe();
+      if (ok) { await loadBridgeApps(); await loadBridgeContacts(); renderLocal(); startAutoSync(); }
+      else {
+        renderLocal();
+        toast(state.bridge.needPair ? '助手已就绪，输入配对码' : '还没检测到助手，看上面的提示', state.bridge.needPair ? '' : 'warn');
+      }
+      got.disabled = false; got.textContent = old;
     };
     const d = $('#bDemo');
     if (d) d.onclick = () => runBridgeDemo();
@@ -2089,6 +2381,210 @@
   }
 
   /* ================= 使用记录 ================= */
+  /* ================= AI 建议面板（T5，依赖 T4） ================= */
+  function aiBubbleHtml() {
+    const has = M && M.hasKey();
+    return `<button class="ai-bubble ${has ? '' : 'disabled'}" id="aiBubble" title="${has ? '基于结构化摘要，不泄露聊天原文' : '还没有配置 API key，点此去设置'}">
+      ${icon('spark', 15)} 问问 AI ${has ? '' : '<span style="font-size:10px;opacity:.8">（需先配置模型）</span>'}
+    </button>`;
+  }
+
+  let aiCtx = null;
+  function bindAiBubble(pid, a, partner) {
+    const b = $('#aiBubble'); if (!b) return;
+    // 缓存结构化上下文；原文默认不进 ctx，只有开关打开才补
+    const turns = (state._lastRows || []).slice(-12).map((m) => ({
+      speaker: m.speaker, text: m.text, isMe: m.speaker === (partner && partner.meSpeaker) || m.speaker === '我'
+    }));
+    aiCtx = {
+      score: a.total, dims: a.dims, momentum: a.momentum,
+      turningPoints: (a.changePoints || []).slice(0, 8).map((p) => ({ date: p.date, delta: p.delta })),
+      lastTurns: turns, partner: partner && partner.name
+    };
+    b.onclick = () => {
+      if (!M || !M.hasKey()) { goto('settings'); toast('先在这里配置模型 API key', 'warn'); return; }
+      openAiPanel();
+    };
+  }
+
+  function openAiPanel() {
+    let panel = $('#aiPanel');
+    if (!panel) {
+      panel = el('div', 'ai-panel'); panel.id = 'aiPanel'; panel.setAttribute('hidden', '');
+      panel.innerHTML = `
+        <div class="ai-head">${icon('spark', 16)}<h3>问问 AI</h3>
+          <span class="spacer"></span>
+          <button class="icon-btn" id="aiClose" aria-label="关闭">${icon('close', 15)}</button></div>
+        <div class="ai-msgs" id="aiMsgs"></div>
+        <div class="ai-tpls" id="aiTpls"></div>
+        <div class="ai-foot">
+          <div class="ai-input-row"><input id="aiInput" placeholder="问点什么…" aria-label="问题"><button class="btn primary sm" id="aiSend">发送</button></div>
+          <label class="ai-raw-toggle"><input type="checkbox" id="aiRaw"> 允许 AI 读取对话原文（默认关闭，仅发结构化摘要）</label>
+        </div>`;
+      document.body.appendChild(panel);
+      $('#aiClose').onclick = () => { panel.hidden = true; };
+      $('#aiTpls').innerHTML = M.TEMPLATES.map((t) => `<button data-q="${esc(t.id)}">${esc(t.label)}</button>`).join('');
+      $$('#aiTpls button').forEach((x) => x.onclick = () => {
+        const t = M.TEMPLATES.find((y) => y.id === x.dataset.q);
+        $('#aiInput').value = t.q; sendAi(t.q);
+      });
+      $('#aiSend').onclick = () => { const q = $('#aiInput').value.trim(); if (q) sendAi(q); };
+      $('#aiInput').onkeydown = (e) => { if (e.key === 'Enter') { const q = $('#aiInput').value.trim(); if (q) sendAi(q); } };
+    }
+    panel.hidden = false;
+    const cfg = M.load();
+    $('#aiRaw').checked = cfg.allowRaw;
+    $('#aiRaw').onchange = () => { cfg.allowRaw = $('#aiRaw').checked; M.save(cfg); };
+    if (!$('#aiMsgs').children.length) addAiMsg('ai', '你好。我已读到这段对话的本地分析结果。默认只看结构化摘要，不会把聊天原文发出去。你可以问我关于趋势、转折或下一步的问题。');
+  }
+
+  function addAiMsg(role, text) {
+    const box = $('#aiMsgs'); if (!box) return null;
+    const d = document.createElement('div');
+    d.className = 'ai-msg ' + (role === 'me' ? 'me' : 'ai');
+    d.textContent = text;
+    box.appendChild(d); box.scrollTop = box.scrollHeight;
+    return d;
+  }
+
+  async function sendAi(question, retry) {
+    const cfg = M.load();
+    if (!cfg.key) { toast('还没有配置 API key', 'warn'); return; }
+    addAiMsg('me', question);
+    const out = addAiMsg('ai', '思考中…');
+    const summary = M.buildContext(aiCtx || { dims: {}, lastTurns: [] }, cfg.allowRaw);
+    const messages = [
+      { role: 'system', content: '你是心动镜的情感复盘助手。只基于给定结构化摘要回答，克制、不臆断、不做关系判决或心理诊断。用中文。' },
+      { role: 'user', content: '结构化摘要：\n' + JSON.stringify(summary) + '\n\n问题：' + question }
+    ];
+    try {
+      const full = await M.streamChat(cfg, messages, (delta, acc) => { out.textContent = acc; $('#aiMsgs').scrollTop = $('#aiMsgs').scrollHeight; });
+      if (!full) out.textContent = '（没有返回内容）';
+    } catch (e) {
+      out.innerHTML = '';
+      out.textContent = '请求失败：' + e.message + ' ';
+      const r = document.createElement('span'); r.className = 'ai-retry'; r.textContent = '重试';
+      r.onclick = () => { out.remove(); sendAi(question, true); };
+      out.appendChild(r);
+    }
+  }
+
+  /* ================= 设置（T4 模型接入 / T8 云端账号 / 备份） ================= */
+  async function viewSettings() {
+    const cfg = M.load();
+    const presetOpts = M.PRESETS.map((p) => `<option value="${p.id}">${p.label}</option>`).join('');
+    const apiBase = Api ? Api.base() : '';
+    const html = `
+      ${head('设置', '模型接入、云端账号与数据备份')}
+
+      <div class="card pad mb16">
+        <h3 style="font-size:14px;margin:0 0 4px">模型接入</h3>
+        <p class="small muted mt6">API key 默认只保存在内存，刷新即失效；勾选「记住」才写入本机。备份 JSON 永不导出 key。</p>
+        <div class="grid g-1-1 mt12">
+          <div class="field"><label>服务商预设</label><select class="input" id="mPreset">${presetOpts}</select></div>
+          <div class="field"><label>Base URL</label><input class="input" id="mBase" value="${esc(cfg.base)}" placeholder="https://api.deepseek.com/v1"></div>
+        </div>
+        <div class="grid g-1-1 mt8">
+          <div class="field"><label>模型 ID</label><input class="input" id="mModel" value="${esc(cfg.model)}" placeholder="deepseek-chat"></div>
+          <div class="field"><label>Temperature</label><input class="input" id="mTemp" type="number" min="0" max="2" step="0.1" value="${cfg.temperature}"></div>
+        </div>
+        <div class="field mt8"><label>API key ${cfg.remember ? '' : '<span class="badge gray">内存模式</span>'}</label>
+          <input class="input" id="mKey" type="password" value="${esc(cfg.key)}" placeholder="sk-…" autocomplete="off"></div>
+        <label class="row mt8" style="gap:8px;font-size:12.5px"><input type="checkbox" id="mRemember" ${cfg.remember ? 'checked' : ''}> 记住这个 key（写入本机 localStorage）</label>
+        <div class="row mt12" style="gap:8px;flex-wrap:wrap">
+          <button class="btn primary sm" id="mSave">保存设置</button>
+          <button class="btn ghost sm" id="mTest">测试连接</button>
+          <span id="mTestMsg" class="small muted"></span>
+        </div>
+      </div>
+
+      <div class="card pad mb16">
+        <h3 style="font-size:14px;margin:0 0 4px">云端账号</h3>
+        <p class="small muted mt6">云端只存账号信息（邮箱、昵称、导入次数统计），聊天记录永远只在本机。</p>
+        <div class="field mt12"><label>云端接口地址（Worker）</label>
+          <input class="input" id="cBase" value="${esc(apiBase)}" placeholder="https://crushlens-api.xxx.workers.dev"></div>
+        <div class="row mt8" style="gap:8px">
+          <button class="btn ghost sm" id="cSave">保存地址</button>
+          <button class="btn ghost sm" id="cMe">查看云端账号</button>
+        </div>
+        <div id="cInfo" class="small muted mt8"></div>
+      </div>
+
+      <div class="card pad">
+        <h3 style="font-size:14px;margin:0 0 4px">数据备份</h3>
+        <p class="small muted mt6">导出 JSON 包含本机记录与账号元数据，明确不含 API key 与会话。</p>
+        <div class="row mt12" style="gap:8px;flex-wrap:wrap">
+          <button class="btn ghost sm" id="bExport">导出备份 JSON</button>
+          <button class="btn ghost sm" id="bImport">导入备份 JSON</button>
+          <input type="file" id="bFile" accept="application/json,.json" hidden>
+        </div>
+      </div>
+    `;
+    $('#main').innerHTML = html;
+
+    // 预设联动
+    const applyPreset = (id) => {
+      const p = M.PRESETS.find((x) => x.id === id); if (!p || id === 'custom') return;
+      $('#mBase').value = p.base; $('#mModel').value = p.model;
+    };
+    $('#mPreset').onchange = () => applyPreset($('#mPreset').value);
+    const cur = M.PRESETS.find((p) => p.base === cfg.base); if (cur) $('#mPreset').value = cur.id;
+
+    const collect = () => ({
+      base: $('#mBase').value.trim(), model: $('#mModel').value.trim(),
+      temperature: parseFloat($('#mTemp').value) || 0, key: $('#mKey').value,
+      remember: $('#mRemember').checked, allowRaw: cfg.allowRaw
+    });
+    $('#mSave').onclick = () => {
+      M.save(collect());
+      toast('模型设置已保存' + ($('#mRemember').checked ? '' : '（key 仅在内存中）'));
+      goto('settings', { quiet: true });
+    };
+    $('#mTest').onclick = async () => {
+      const btn = $('#mTest'); btn.disabled = true; $('#mTestMsg').textContent = '测试中…';
+      try {
+        const r = await M.testConnection(collect());
+        $('#mTestMsg').textContent = '连接成功 · 延迟 ' + r.latency + 'ms';
+      } catch (e) {
+        $('#mTestMsg').textContent = '失败：' + e.message + (e.latency ? '（' + e.latency + 'ms）' : '');
+      } finally { btn.disabled = false; }
+    };
+
+    $('#cSave').onclick = () => {
+      try { Api.setBase($('#cBase').value.trim()); toast('云端地址已保存'); }
+      catch (e) { toast(e.message, 'warn'); }
+    };
+    $('#cMe').onclick = async () => {
+      if (!Api.configured()) { $('#cInfo').textContent = '还没配置云端接口地址'; return; }
+      try { const r = await Api.me(); $('#cInfo').textContent = '邮箱：' + r.account.email + ' · 登录 ' + r.account.login_count + ' 次 · 追踪对象 ' + r.account.partner_count + ' 个'; }
+      catch (e) { $('#cInfo').textContent = '未登录云端：' + e.message; }
+    };
+
+    $('#bExport').onclick = async () => {
+      const backup = await S.exportBackup();
+      backup.localStorage = M.safeLocalSnapshot(); // 明确排除 API key
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = '心动镜备份-' + fmtDateFull(Date.now()) + '.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      toast('备份已导出（不含 API key）');
+    };
+    $('#bImport').onclick = () => $('#bFile').click();
+    $('#bFile').onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      const ok = await confirmDlg({ title: '导入备份', text: '会把备份里的记录合并进当前账号，确定继续？', okText: '导入' });
+      if (!ok) return;
+      try {
+        const data = JSON.parse(await f.text());
+        const r = await S.importBackup(data);
+        toast('已导入 ' + r.rows + ' 条记录');
+        goto('settings', { quiet: true });
+      } catch (err) { toast('导入失败：' + err.message, 'warn'); }
+    };
+  }
+
   async function viewUsage() {
     const all = [];
     for (const p of state.partners) {
@@ -2243,4 +2739,4 @@
                <button class="btn ghost" data-close>关闭</button>`
     });
   }
-})();
+})(window);

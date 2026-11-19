@@ -3,7 +3,7 @@
  * 总开发者：永久权限 / 可查看全部使用记录与聊天内容
  * 被授权者：限时权限 / 可看统计与用户，不可调阅聊天内容
  * ============================================================ */
-(function () {
+(function (root) {
   'use strict';
   const { $, $$, esc, icon, toast, modal, confirmDlg, donut, bars, avatar,
     empty, fmtDate, fmtDateFull, fmtDT, relTime, fmtNum, sideDrawer, cssVar, avatarPair,
@@ -174,7 +174,8 @@
     { id: 'users', label: '用户与记录', icon: 'users' },
     { id: 'usage', label: '使用分析', icon: 'chart' },
     { id: 'perms', label: '权限管理', icon: 'shield' },
-    { id: 'audit', label: '审计日志', icon: 'report' }
+    { id: 'audit', label: '审计日志', icon: 'report' },
+    { id: 'cloud', label: '云端账号', icon: 'users' }
   ];
 
   function enterConsole() {
@@ -234,6 +235,7 @@
     else if (view === 'usage') await viewUsage();
     else if (view === 'perms') await viewPerms();
     else if (view === 'audit') await viewAudit();
+    else if (view === 'cloud') await viewCloudAccounts();
     if (!quiet) window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -683,4 +685,49 @@
     `;
     $('#main').innerHTML = html;
   }
-})();
+
+  /* ================= 云端账号（T8：仅元数据，零聊天内容） ================= */
+  async function viewCloudAccounts() {
+    const Api = root.CLApi;
+    const headHtml = `<div class="page-head"><div><h1>云端账号</h1>
+      <p>来自云端 Worker 的账号元数据：邮箱、昵称、登录次数、追踪对象计数。不含任何聊天内容。</p></div>
+      <div class="spacer"></div><div class="row"><button class="btn ghost sm" id="caRefresh">${icon('refresh', 14)} 刷新</button></div></div>`;
+    if (!Api || !Api.configured()) {
+      $('#main').innerHTML = headHtml + `<div class="card">${empty('alert', '还没配置云端接口地址', '请在用户端「设置 → 云端账号」填入 Worker 地址后刷新。', '')}</div>`;
+      return;
+    }
+    $('#main').innerHTML = headHtml + `<div class="card pad center muted small" style="padding:48px">正在读取云端账号…</div>`;
+    try {
+      const r = await Api.adminAccounts();
+      const rows = r.accounts || [];
+      $('#main').innerHTML = headHtml + `
+        <div class="grid g4 mb16">
+          <div class="card kpi"><div class="kpi-lab">云端账号</div><div class="kpi-val">${rows.length}</div></div>
+          <div class="card kpi"><div class="kpi-lab">GitHub 登录</div><div class="kpi-val">${rows.filter((a) => a.provider === 'github').length}</div></div>
+          <div class="card kpi"><div class="kpi-lab">邮箱注册</div><div class="kpi-val">${rows.filter((a) => a.provider === 'password').length}</div></div>
+          <div class="card kpi"><div class="kpi-lab">追踪对象合计</div><div class="kpi-val">${rows.reduce((s, a) => s + (a.partner_count || 0), 0)}</div></div>
+        </div>
+        <div class="card"><div class="card-head"><div><h3>账号列表</h3><div class="sub">仅元数据 · 聊天内容仍在本机</div></div></div>
+          <div class="card-body table-wrap">
+          ${rows.length ? `<table class="tb"><thead><tr><th>邮箱</th><th>昵称</th><th>来源</th><th>创建</th><th>最近登录</th><th>登录次数</th><th>追踪对象</th></tr></thead>
+            <tbody>${rows.map((a) => `<tr>
+              <td>${esc(a.email || '—')}</td><td>${esc(a.name || '—')}</td>
+              <td><span class="badge gray">${esc(a.provider || '—')}</span></td>
+              <td class="small muted">${fmtDateFull(a.created_at)}</td>
+              <td class="small muted">${relTime(a.last_login)}</td>
+              <td class="num">${a.login_count || 0}</td>
+              <td class="num">${a.partner_count || 0}</td>
+            </tr>`).join('')}</tbody></table>`
+        : empty('users', '云端还没有账号', '用户注册或 GitHub 登录后会出现在这里。')}
+          </div>
+        </div>
+        <p class="tiny muted mt12">注意：这里刻意不展示也不存储任何聊天记录 / 追踪对象明细，符合「聊天内容只在本机」的约定。</p>
+      `;
+      $('#caRefresh').onclick = () => viewCloudAccounts();
+      await S.log(state.me.id, 'cloud_accounts_view', '', { count: rows.length });
+    } catch (e) {
+      $('#main').innerHTML = headHtml + `<div class="card">${empty('alert', '读取失败', e.message || '请确认是总开发者且云端地址正确。', '<button class="btn ghost sm" id="caRefresh">重试</button>')}</div>`;
+      const rr = $('#caRefresh'); if (rr) rr.onclick = () => viewCloudAccounts();
+    }
+  }
+})(window);
