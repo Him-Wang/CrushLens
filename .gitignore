@@ -11,6 +11,9 @@ release/
 # Packaged artifacts (published through GitHub Releases)
 *.zip
 *.7z
+# 例外：v2.1 起这两个下载包必须随站点一起发布到 GitHub Pages
+!web/assistant/心动镜连接助手-v2.zip
+!web/tools/wechat-reader/心动镜微信记录读取器-v1.0.0.zip
 
 # IDE / OS noise
 .vs/
