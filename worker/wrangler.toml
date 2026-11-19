@@ -1,0 +1,18 @@
+name = "crushlens-api"
+main = "index.js"
+compatibility_date = "2026-01-01"
+# No custom domain on purpose: the free *.workers.dev subdomain is used.
+# Set these secrets with `wrangler secret put <NAME>` (never commit values):
+#   GH_CLIENT_ID, GH_CLIENT_SECRET, BREVO_KEY, PEPPER, OWNER_EMAIL
+# Set this var (not a secret) with `wrangler variable put`:
+#   SITE_ORIGIN = https://him-wang.github.io
+
+[[d1_databases]]
+binding = "DB"
+database_name = "crushlens"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[vars]
+SITE_ORIGIN = "https://him-wang.github.io"
+# Brevo sender. Free tier: verify this sender in Brevo dashboard first.
+MAIL_FROM = "CrushLens <no-reply@crushlens.workers.dev>"
