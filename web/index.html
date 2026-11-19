@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>心动镜 · 情感浓度追踪</title>
+<meta name="description" content="从聊天记录里看见情感浓度的变化趋势，复盘过去，预测接下来七天。">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%23e11d48'/><path d='M50 78S22 60 22 42a15 15 0 0 1 28-7 15 15 0 0 1 28 7c0 18-28 36-28 36Z' fill='white'/></svg>">
+<meta name="theme-color" content="#faf8f7">
+<script>
+/* 防闪烁：绘制前先把主题挂上，刷新不会闪一下默认色 */
+(function(){try{var t=localStorage.getItem('cl_theme');
+if(!t||['rose','mist','matcha','dusk','night'].indexOf(t)<0){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'night':'rose';}
+document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','rose');}})();
+</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<!-- ============ 登录 / 注册 ============ -->
+<div id="auth" class="auth-shell" hidden>
+  <div class="auth-visual">
+    <div>
+      <div class="brand" style="padding:0">
+        <div class="brand-mark">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M20.8 5.6a5 5 0 0 0-7.1 0L12 7.3l-1.7-1.7a5 5 0 1 0-7.1 7.1L12 21l8.8-8.3a5 5 0 0 0 0-7.1Z"/>
+          </svg>
+        </div>
+        <div class="brand-txt">
+          <strong>心动镜</strong>
+          <span style="color:var(--auth-ink-3)">CRUSHLENS · CLOUD</span>
+        </div>
+      </div>
+
+      <div class="auth-hero">
+        <h1>把一段对话<br>画成一条曲线</h1>
+        <p>不是读心术，也不是关系判决书。它只是把聊天里本来就存在的信号——主动、回应、关心、亲密——整理成一条能看见的时间线。</p>
+      </div>
+
+      <div class="auth-feats">
+        <div class="auth-feat">
+          <span class="fi"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 13h4l3 7 4-16 3 9h4"/></svg></span>
+          <div><b>情感浓度追踪</b>逐日打分，自动标记转折点，7 日均线抹平噪音</div>
+        </div>
+        <div class="auth-feat">
+          <span class="fi"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg></span>
+          <div><b>增量导入</b>按聊天对象分组，下次只导新记录，自动去重</div>
+        </div>
+        <div class="auth-feat">
+          <span class="fi"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5.5 5.5 0 0 1 7 0M12 20h.01"/></svg></span>
+          <div><b>实时监测</b>后台持续重算，浓度突变即时提醒</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="auth-foot">聊天记录只保存在你自己的浏览器里 · 不上传任何服务器</div>
+  </div>
+
+  <div class="auth-form-side">
+    <div class="auth-card">
+      <h2 id="authTitle">欢迎回来</h2>
+      <p id="authSub">登录后继续追踪你的对话曲线</p>
+
+      <div class="auth-tabs">
+        <button data-tab="login" class="active">登录</button>
+        <button data-tab="signup">注册</button>
+      </div>
+
+      <form id="authForm" autocomplete="on">
+        <div class="field">
+          <label>邮箱</label>
+          <input class="input" id="fEmail" type="email" placeholder="you@example.com" autocomplete="username" required>
+        </div>
+        <div class="field" id="nameField" hidden>
+          <label>昵称</label>
+          <input class="input" id="fName" type="text" placeholder="希望我们怎么称呼你" autocomplete="nickname">
+        </div>
+        <div class="field">
+          <label>密码</label>
+          <input class="input" id="fPass" type="password" placeholder="至少 6 位" autocomplete="current-password" required>
+        </div>
+        <div class="err-line" id="authErr"></div>
+        <button class="btn primary block lg" type="submit" id="authSubmit">登录</button>
+      </form>
+
+      <div class="auth-note">
+        <b>关于账号：</b>当前是本机版，账号和数据都保存在这台设备的浏览器中，换设备或清理浏览器数据会丢失。需要多人跨设备同步时，告诉我「开通云服务」即可升级。
+      </div>
+
+      <div class="theme-row">
+        <span>主题</span>
+        <select data-theme-select aria-label="配色主题">
+          <option value="system">跟随系统</option>
+          <option value="rose">玫瑰</option>
+          <option value="mist">雾蓝</option>
+          <option value="matcha">抹茶</option>
+          <option value="dusk">黄昏</option>
+          <option value="night">夜间</option>
+        </select>
+      </div>
+
+      <div class="row between" style="margin-top:16px">
+        <a class="small muted" href="admin.html" style="text-decoration:underline">开发者入口 →</a>
+        <span class="tiny muted">v2.0</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 主应用 ============ -->
+<div id="app" class="app" hidden>
+  <div class="mobile-bar">
+    <button class="icon-btn" id="sideToggle" aria-label="菜单">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <strong id="mobileTitle">心动镜</strong>
+  </div>
+
+  <aside class="side" id="side">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M20.8 5.6a5 5 0 0 0-7.1 0L12 7.3l-1.7-1.7a5 5 0 1 0-7.1 7.1L12 21l8.8-8.3a5 5 0 0 0 0-7.1Z"/>
+        </svg>
+      </div>
+      <div class="brand-txt">
+        <strong>心动镜</strong>
+        <span>CRUSHLENS · CLOUD</span>
+      </div>
+      <button class="side-close" data-side-close aria-label="收起侧边栏" title="收起侧边栏">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+        <span>收起</span>
+      </button>
+    </div>
+
+    <nav class="nav" id="nav"></nav>
+
+    <div class="side-sec">
+      <span>追踪对象</span>
+      <button id="addPartnerBtn" title="新增追踪对象">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+    <div class="plist" id="plist"></div>
+
+    <div class="side-foot">
+      <div class="theme-row">
+        <span>主题</span>
+        <select id="themeSelect" data-theme-select aria-label="主题">
+          <option value="system">跟随系统</option>
+          <option value="rose">玫瑰</option>
+          <option value="mist">雾蓝</option>
+          <option value="matcha">抹茶</option>
+          <option value="dusk">黄昏</option>
+          <option value="night">夜间</option>
+        </select>
+      </div>
+      <div class="userchip">
+        <span class="avatar" id="meAvatar" style="width:32px;height:32px;font-size:13px"></span>
+        <div style="min-width:0">
+          <div class="u-name" id="meName">—</div>
+          <div class="u-role" id="meRole">普通用户</div>
+        </div>
+        <button class="icon-btn" id="logoutBtn" title="退出登录">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4m7 14 5-5-5-5m5 5H9"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main" id="main"></main>
+</div>
+
+<script src="assets/engine.js"></script>
+<script src="assets/ocr.js"></script>
+<script src="assets/store.js"></script>
+<script src="assets/theme.js"></script>
+<script src="assets/ui.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
