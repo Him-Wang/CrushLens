@@ -283,7 +283,7 @@
       ${yGrid}
       <path d="${areaD}" fill="url(#areaG)"/>
       <path d="${bandD}" class="band"/>
-      <path d="${segPath(dailyScores)}" class="line-main"/>
+      <path d="${segPath(dailyScores)}" class="line-main" pathLength="1"/>
       <path d="${segPath(ma)}" class="line-ma"/>
       <path d="${segPath([dailyScores[lastIdx]].concat(forecast.map((f) => f.score)), lastIdx)}" class="line-fc"/>
       ${marks}

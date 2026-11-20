@@ -37,13 +37,15 @@ body{
              background-color .4s var(--e-soft),
              border-color .4s var(--e-soft);
 }
-.card,.kpi,.appcard,.perm-card,.chip,.badge,.pill,.userchip,.card-head{
+/* card 系列自身的 transition 统一在第 4 节定义一次，避免两处同名规则互相覆盖 */
+.chip,.badge,.userchip,.card-head{
   transition:background-color .4s var(--e-soft),
              border-color .4s var(--e-soft),
              box-shadow var(--t-md) var(--e-soft);
 }
 ::selection{background:var(--rose-soft);color:var(--rose)}
-:focus-visible{outline:2px solid var(--rose-2);outline-offset:2px;border-radius:4px}
+/* 只给 outline，不动 border-radius：元素原有圆角（导航 10px / 圆钮 99px）不该在聚焦瞬间变形 */
+:focus-visible{outline:2px solid var(--rose-2);outline-offset:2px}
 
 /* ---------------------------------------------------------------------------
    2. 关键帧（统一 cl- 前缀，不与原版 ovFade/sklShine/pulse/halo… 冲突）
@@ -61,15 +63,20 @@ body{
 
 /* ---------------------------------------------------------------------------
    3. 视图 / 卡片入场：分层交错浮现（视图一切换就依次出现，节奏轻盈）
+
+   fill-mode 一律用 backwards，不能用 both：
+   动画结束后 both 会把 transform:none 永久留在元素上，而动画来源在层叠里
+   高于作者普通声明，会压死 .kpi:first-child 的 scale(1.02) 与各种 :hover
+   位移（style.css 的 .grid.g4 .kpi:first-child / .rev:hover，以及本文件第 4 节）。
    --------------------------------------------------------------------------- */
-#main.ov-enter > *{animation:clRise var(--t-md) var(--e-out) both}
-#main.ov-enter > *:nth-child(2){animation-delay:.05s}
-#main.ov-enter > *:nth-child(3){animation-delay:.1s}
-#main.ov-enter > *:nth-child(4){animation-delay:.15s}
-#main.ov-enter > *:nth-child(n+5){animation-delay:.2s}
+#main.ov-enter > *{animation:clRise var(--t-md) var(--e-out) backwards}
+#main.ov-enter > *:nth-child(2){animation-delay:.04s}
+#main.ov-enter > *:nth-child(3){animation-delay:.08s}
+#main.ov-enter > *:nth-child(4){animation-delay:.12s}
+#main.ov-enter > *:nth-child(n+5){animation-delay:.16s}
 
 .grid > *,.rev-grid > *,.grid > .card > *{
-  animation:clRiseSm var(--t-md) var(--e-out) both;
+  animation:clRiseSm var(--t-md) var(--e-out) backwards;
 }
 .grid > *:nth-child(1){animation-delay:.04s}
 .grid > *:nth-child(2){animation-delay:.09s}
@@ -79,13 +86,17 @@ body{
 /* ---------------------------------------------------------------------------
    4. 卡片 / 列表项的悬浮质感（轻微抬升 + 阴影加深，克制不浮夸）
    --------------------------------------------------------------------------- */
+.card,.appcard,.perm-card{
+  transition:transform var(--t-md) var(--e-out),
+             box-shadow var(--t-md) var(--e-out),
+             background-color .4s var(--e-soft),
+             border-color .4s var(--e-soft);
+}
 .card:hover{
   transform:translateY(-2px);
   box-shadow:0 2px 6px rgba(23,21,26,.05),0 20px 44px -22px rgba(23,21,26,.3);
 }
-.card{transition:transform var(--t-md) var(--e-out),box-shadow var(--t-md) var(--e-out),background-color .4s,border-color .4s}
 .appcard:hover,.perm-card:hover{transform:translateY(-2px)}
-.appcard,.perm-card{transition:border-color .16s,transform var(--t-sm) var(--e-out)}
 table.tb tbody tr:hover{background:var(--surface-2)}
 
 /* ---------------------------------------------------------------------------
@@ -95,14 +106,16 @@ table.tb tbody tr:hover{background:var(--surface-2)}
 .btn:hover{transform:translateY(-1px)}
 .btn:active{transform:translateY(1px) scale(.98)}
 
-.btn.primary,.btn.pri{position:relative;overflow:hidden;isolation:isolate}
-.btn.primary::after,.btn.pri::after{
+.btn.primary{position:relative;overflow:hidden;isolation:isolate}
+.btn.primary::after{
   content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
   background:linear-gradient(105deg,transparent 32%,rgba(255,255,255,.34) 50%,transparent 68%);
   transform:translateX(-120%);
 }
-.btn.primary:hover::after,.btn.pri:hover::after{animation:clShimmer .7s var(--e-out)}
-.btn.primary:hover,.btn.pri:hover{box-shadow:0 12px 26px -12px rgba(225,29,72,.6)}
+.btn.primary:hover::after{animation:clShimmer .7s var(--e-out)}
+/* 阴影跟随主题色：先用固定值兜底，支持 color-mix 再覆盖（下同） */
+.btn.primary:hover{box-shadow:0 12px 26px -12px rgba(225,29,72,.55)}
+.btn.primary:hover{box-shadow:0 12px 26px -12px color-mix(in srgb,var(--rose) 60%,transparent)}
 
 /* 图标按钮 hover 轻微放大 */
 .icon-btn:hover svg{transform:scale(1.08)}
@@ -132,11 +145,18 @@ table.tb tbody tr:hover{background:var(--surface-2)}
 /* ---------------------------------------------------------------------------
    8. 图表动效：曲线生长、末点光晕、柱状交错、雷达/圆环入场
    --------------------------------------------------------------------------- */
+/* 曲线生长用 pathLength="1" 归一化（见 ui.js 的 .line-main），
+   不再写死 1400：长周期 / 大波动数据的真实弧长会超过 1400，最新一段会被裁掉。 */
 .trend-svg .line-main{animation:clDraw 1.5s var(--e-out) both}
-@keyframes clDraw{from{stroke-dasharray:1400;stroke-dashoffset:1400}to{stroke-dasharray:1400;stroke-dashoffset:0}}
+@keyframes clDraw{from{stroke-dasharray:1;stroke-dashoffset:1}to{stroke-dasharray:1;stroke-dashoffset:0}}
 
-/* 末点光晕在原 halo 之外叠加一层更慢的呼吸 */
-.trend-svg .last-halo{animation:halo 2.4s ease-out infinite,clHalo 3.6s ease-out infinite}
+/* 末点光晕：原 halo 走 r，本文件的 clHalo 走 scale。
+   SVG <circle> 的 scale 默认以 view-box 原点为 transform-origin，
+   不加 transform-box 光晕会朝左上漂走，必须钉在自身包围盒中心。 */
+.trend-svg .last-halo{
+  transform-box:fill-box;transform-origin:center;
+  animation:halo 2.4s ease-out infinite,clHalo 3.6s ease-out infinite;
+}
 
 /* 柱状图按序生长（原版已有 width .7s 过渡，这里给交错延迟，不覆盖过渡） */
 .bar-row:nth-child(1) .bf{transition-delay:.02s}
@@ -146,17 +166,21 @@ table.tb tbody tr:hover{background:var(--surface-2)}
 .bar-row:nth-child(5) .bf{transition-delay:.14s}
 .bar-row:nth-child(n+6) .bf{transition-delay:.17s}
 
-/* 雷达 / 圆环 / 仪表数字入场 */
-.radar,.donut-wrap,.gauge{animation:clRiseSm var(--t-md) var(--e-out) both}
+/* 雷达 / 圆环入场。
+   注意：.gauge 不能加此类动画——实时监测页每 6s 会重建 #rtGauge 的 innerHTML
+   （app.js refreshRt），加了就会变成每 6 秒重播一次淡入。 */
+.radar,.donut-wrap{animation:clRiseSm var(--t-md) var(--e-out) backwards}
 .donut-arc{filter:drop-shadow(0 3px 6px rgba(225,29,72,.25))}
+.donut-arc{filter:drop-shadow(0 3px 6px color-mix(in srgb,var(--rose) 30%,transparent))}
 .gauge-num{animation:clGlow 3s ease-in-out infinite}
 
 /* ---------------------------------------------------------------------------
    9. 弹窗 / 抽屉 / Toast：弹性进入，遮罩轻微模糊
    --------------------------------------------------------------------------- */
-.modal-mask.in,.drawer-mask.in{backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+/* 遮罩模糊原版 style.css 已有（.modal-mask.in），这里不再重复声明 */
 .modal{animation:clPop var(--t-md) var(--e-out) both}
-.drawer.in{animation:clSlideIn var(--t-sm) var(--e-out) both}
+/* 抽屉保留原版「从右侧整幅滑入」（style.css .drawer / .drawer.in），
+   不能用 clSlideIn 覆盖 transform，否则滑入方向会变成从左侧 10px 冒出。 */
 .toast.in{animation:clToastIn var(--t-md) var(--e-out) both}
 .toast-wrap .toast:nth-child(2){animation-delay:.04s}
 .toast-wrap .toast:nth-child(3){animation-delay:.08s}
@@ -164,17 +188,17 @@ table.tb tbody tr:hover{background:var(--surface-2)}
 /* ---------------------------------------------------------------------------
    10. 主题悬浮按钮 / 昼夜滑块：指尖反馈更明确
    --------------------------------------------------------------------------- */
-.theme-fab:hover{transform:scale(1.12) rotate(24deg)}
-.theme-fab:active{transform:scale(.94)}
 .theme-fab{transition:transform var(--t-sm) var(--e-out),box-shadow var(--t-sm)}
-.theme-fab:hover{box-shadow:0 12px 28px -10px rgba(225,29,72,.5)}
+.theme-fab:hover{transform:scale(1.08) rotate(10deg)}
+.theme-fab:active{transform:scale(.94)}
+.theme-fab:hover{box-shadow:0 12px 28px -10px rgba(225,29,72,.45)}
+.theme-fab:hover{box-shadow:0 12px 28px -10px color-mix(in srgb,var(--rose) 50%,transparent)}
 .daynight .dn-knob{transition:left var(--t-sm) var(--e-out),box-shadow var(--t-sm)}
 .ds-dot,.dot.live,.conn.on i,.pulse{animation-duration:2.2s}
 
 /* ---------------------------------------------------------------------------
-   11. 骨架屏 / 进度条：光泽更顺滑，进度更稳
+   11. 进度条 / 拖拽区（骨架屏保留原版 sklShine 1.3s，此处不再重复声明）
    --------------------------------------------------------------------------- */
-.skl-line,.skl-block{animation:sklShine 1.4s ease-in-out infinite}
 .prog-bar{transition:width .45s var(--e-out)}
 .dropzone:hover{border-color:var(--rose-2);background:var(--rose-soft)}
 
@@ -186,13 +210,13 @@ table.tb tbody tr:hover{background:var(--surface-2)}
 /* ---------------------------------------------------------------------------
    13. 登录页：品牌视觉轻微呼吸 + 卡片浮现
    --------------------------------------------------------------------------- */
-.auth-card{animation:clRise var(--t-lg) var(--e-out) both}
-.auth-feats .auth-feat{animation:clRiseSm var(--t-md) var(--e-out) both}
+.auth-card{animation:clRise var(--t-lg) var(--e-out) backwards}
+.auth-feats .auth-feat{animation:clRiseSm var(--t-md) var(--e-out) backwards}
 .auth-feats .auth-feat:nth-child(1){animation-delay:.06s}
 .auth-feats .auth-feat:nth-child(2){animation-delay:.12s}
 .auth-feats .auth-feat:nth-child(3){animation-delay:.18s}
-.auth-demo-link:hover{transform:translateX(3px)}
 .auth-demo-link{transition:transform var(--t-sm) var(--e-out),color var(--t-sm)}
+.auth-demo-link:hover{transform:translateX(3px)}
 
 /* ---------------------------------------------------------------------------
    14. 可读性微修：原版若干辅助文字为 10.5–11.5px、对比度略低于 4.5:1，
@@ -205,18 +229,22 @@ table.tb tbody tr:hover{background:var(--surface-2)}
 .daynight .dn-label,
 .userchip .u-role{font-size:12px}
 
-/* active 导航字色随主题加深（color-mix 让它跟着各主题的 --rose 走） */
-.nav-item.active{color:color-mix(in srgb,var(--rose) 85%,#000)}
-@supports not (color:color-mix(in srgb,red 50%,black)){
-  .nav-item.active{color:#be123c}
-}
 .nav-badge,
 .pitem-sub{color:var(--ink-2)}
 
-/* 分数在浅粉选中底上加深（app.js 用行内 style 写色，需 !important 才能覆盖） */
-.pitem-score{color:color-mix(in srgb,var(--rose) 82%,#000)!important}
+/* active 导航字色加深。用 var(--ink) 当调色剂：浅色主题里 ink 接近黑 → 变深，
+   深色主题（night）里 ink 接近白 → 变亮，两边都提高对比，不会越改越糊。 */
+.nav-item.active{color:color-mix(in srgb,var(--rose) 85%,var(--ink))}
 @supports not (color:color-mix(in srgb,red 50%,black)){
-  .pitem-score{color:#be123c!important}
+  .nav-item.active{color:var(--rose)}
+}
+
+/* 分数只在选中项上加深；非选中项保持原版 --ink-2（中性灰是信息，不该被染成告警色）。
+   这里不需要 !important：app.js 生成的 <span class="pitem-score"> 没有行内色。 */
+.pitem-score{color:var(--ink-2)}
+.pitem.active .pitem-score{color:color-mix(in srgb,var(--rose) 82%,var(--ink))}
+@supports not (color:color-mix(in srgb,red 50%,black)){
+  .pitem.active .pitem-score{color:var(--rose)}
 }
 
 /* 侧栏「+」点击区 */

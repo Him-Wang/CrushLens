@@ -537,7 +537,9 @@
     await goto('overview');
     const main = $('#main');
     main.classList.add('ov-enter'); // 给一个轻微的淡入，确认「已经换了」
-    setTimeout(() => main.classList.remove('ov-enter'), 420);
+    // 620ms 要覆盖 skin.css 的入场时长（.36s + 最迟 .16s 延迟 = .52s），
+    // 否则类被提前摘掉，交错动画会被拦腰截断。
+    setTimeout(() => main.classList.remove('ov-enter'), 620);
   }
 
   async function viewOverview() {
