@@ -9,8 +9,20 @@
   const DB_NAME = 'crushlens_local_v1';
   const DB_VER = 1;
   const SESSION_KEY = 'crushlens_session_v1';
+  const DEMO_KEY = 'cl_demo';
 
   let dbPromise = null;
+
+  /* ---------------- 演示模式（T3，纯内存，一行都不落盘） ----------------
+     进入演示会 sessionStorage 置 cl_demo=1；所有写操作经 assertWritable()
+     抛出 DEMO_READONLY，读操作改走内存库 demoDB。刷新后 sessionStorage 仍在
+     但 app 启动会离开演示态并清掉内存库，IndexedDB 全程零写入。 */
+  let demoMode = false;
+  let demoDB = null;
+  function assertWritable() {
+    if (demoMode) throw new Error('DEMO_READONLY：演示数据不会保存，注册后即可开始记录');
+  }
+  function isDemo() { return demoMode || (() => { try { return sessionStorage.getItem(DEMO_KEY) === '1'; } catch (e) { return false; } })(); }
 
   function openDB() {
     return new Promise((resolve, reject) => {
@@ -43,6 +55,22 @@
   }
 
   function run(store, mode, fn) {
+    if (demoMode && mode !== 'readonly') return Promise.reject(new Error('DEMO_READONLY：演示数据不会保存'));
+    // 演示态下所有读都走内存库：用一个最小的 store 桩，语义与 IndexedDB 一致
+    if (demoMode) {
+      const rows = (demoDB && demoDB[store]) || [];
+      const fake = {
+        getAll() { return memReq(rows.slice()); },
+        get(k) { return memReq(rows.find((x) => x.id === k)); },
+        index(name) {
+          return { getAll(k) { return memReq(rows.filter((x) => indexValue(x, name) === k)); } };
+        },
+        put() { return memReq(null); }, add() { return memReq(null); }, delete() { return memReq(null); }
+      };
+      let out;
+      try { out = fn(fake); } catch (err) { return Promise.reject(err); }
+      return Promise.resolve(out && out.__result !== undefined ? out.__result : out);
+    }
     return db().then((d) => new Promise((resolve, reject) => {
       const t = d.transaction(store, mode);
       const s = t.objectStore(store);
@@ -54,17 +82,29 @@
     }));
   }
 
+  function indexValue(row, name) {
+    // store.js 里所有二级索引都是单字段（uid / pid / status / at / email）
+    if (name === 'uidName') return [row.uid, row.name];
+    return row[name];
+  }
+  function memReq(result) {
+    // 同步回填 __result：演示态的 run() 直接 Promise.resolve，不能等 setTimeout
+    return { __result: result, result };
+  }
+
   function wrap(request) {
-    const o = { __result: undefined };
+    // __result 预置值用于演示态的同步内存请求；真实 IndexedDB 请求初始为 undefined，
+    // 由 onsuccess 回填。
+    const o = { __result: request && request.__result !== undefined ? request.__result : undefined };
     request.onsuccess = () => { o.__result = request.result; };
     return o;
   }
 
   const getAll = (store, index, key) => run(store, 'readonly', (s) => wrap(index ? s.index(index).getAll(key) : s.getAll()));
   const getOne = (store, key) => run(store, 'readonly', (s) => wrap(s.get(key)));
-  const put = (store, val) => run(store, 'readwrite', (s) => wrap(s.put(val)));
-  const add = (store, val) => run(store, 'readwrite', (s) => wrap(s.add(val)));
-  const del = (store, key) => run(store, 'readwrite', (s) => wrap(s.delete(key)));
+  const put = (store, val) => { assertWritable(); return run(store, 'readwrite', (s) => wrap(s.put(val))); };
+  const add = (store, val) => { assertWritable(); return run(store, 'readwrite', (s) => wrap(s.add(val))); };
+  const del = (store, key) => { assertWritable(); return run(store, 'readwrite', (s) => wrap(s.delete(key))); };
 
   /* ---------------- 密码哈希 ----------------
      只用 PBKDF2。绝不静默降级成非加密哈希：
@@ -159,6 +199,7 @@
     const salt = randHex(16);
     const acc = {
       email, name, salt, pw: await hashPw(password, salt), pwAlg: PW_ALG,
+      provider: o.provider || 'password', githubId: o.githubId || null, avatar: o.avatar || null,
       createdAt: Date.now(), lastLogin: Date.now(), loginCount: 1,
       isDeveloper: !!o.developer
     };
@@ -173,6 +214,8 @@
     const all = await getAll('accounts');
     const acc = all.find((a) => a.email === email);
     if (!acc) throw new Error('没有找到这个账号，先注册一个');
+    // provider:'github' 的账号禁止密码登录（T1）：否则等于给社交账号留了一个弱口令后门
+    if (acc.provider === 'github') throw new Error('这个账号是用 GitHub 登录的，请用 GitHub 按钮登录');
     // 老账号没有算法标记说明是早期弱哈希，明确提示而不是给出「密码不对」
     if (acc.pwAlg !== PW_ALG) {
       throw new Error('这个账号是旧版本创建的，密码校验方式已升级，无法登录。请用同一个邮箱重新注册。');
@@ -368,6 +411,7 @@
   const IMPORT_BATCH = 500;
 
   function bulkPut(rows) {
+    assertWritable();
     return db().then((d) => new Promise((resolve, reject) => {
       if (!rows.length) { resolve(0); return; }
       const t = d.transaction('messages', 'readwrite');
@@ -638,6 +682,181 @@
     return { skipped: false, count: specs.length };
   }
 
+  /* ---------------- 演示模式（T3）---------------- */
+  // 全部数据在内存里构造，不调用任何 add/put，IndexedDB 零写入。
+  function buildDemoDB() {
+    const uid = 'demo';
+    const dbx = { accounts: [], partners: [], messages: [], batches: [], reports: [], grants: [], requests: [], audit: [], meta: [] };
+    dbx.accounts.push({
+      id: uid, email: 'demo@local', name: '演示用户', provider: 'password',
+      createdAt: Date.now(), lastLogin: Date.now(), loginCount: 1
+    });
+    const specs = [
+      { name: '林晚', platform: 'wechat', mode: 'crush', days: 46, kind: 'rise', note: '同事介绍，聊了一个多月' },
+      { name: '陈屿', platform: 'qq', mode: 'crush', days: 38, kind: 'flat', note: '大学同学，最近重新聊上' },
+      { name: '苏念', platform: 'dingtalk', mode: 'couple', days: 34, kind: 'fall', note: '在一起两年，最近有点冷战' }
+    ];
+    let pid = 0;
+    specs.forEach((spec, si) => {
+      const p = {
+        id: ++pid, uid, name: spec.name, platform: spec.platform, mode: spec.mode, note: spec.note,
+        meSpeaker: '我', color: pickColor(spec.name),
+        createdAt: Date.now() - spec.days * 86400000, msgCount: 0,
+        firstMsgAt: null, lastMsgAt: null, lastImportAt: Date.now()
+      };
+      const rnd = mulberry32(2000 + si * 77);
+      const rows = [];
+      for (let d = spec.days - 1; d >= 0; d--) {
+        const day = E.addDays(new Date(), -d);
+        const progress = (spec.days - d) / spec.days;
+        let temp = spec.kind === 'rise' ? 0.25 + progress * 0.6 + (rnd() - 0.5) * 0.18
+          : spec.kind === 'fall' ? 0.78 - progress * 0.5 + (rnd() - 0.5) * 0.15
+            : 0.5 + Math.sin(progress * 6) * 0.12 + (rnd() - 0.5) * 0.12;
+        temp = E.clamp(temp, 0.05, 0.95);
+        if (rnd() >= 0.55 + temp * 0.4) continue;
+        const count = Math.max(2, Math.round(2 + temp * 9 + (rnd() - 0.5) * 3));
+        for (let i = 0; i < count; i++) {
+          const speaker = rnd() < 0.5 ? spec.name : '我';
+          const bucket = rnd() < temp ? 'warm' : (rnd() < 0.5 ? 'neutral' : 'cool');
+          let text = pickSentence(bucket, rnd);
+          if (bucket === 'warm' && rnd() < 0.35) text += rnd() < 0.5 ? ' 😊' : ' [表情]';
+          const t = new Date(day); t.setHours(9 + Math.floor(rnd() * 14), Math.floor(rnd() * 60), Math.floor(rnd() * 60), 0);
+          rows.push({ speaker, text, time: t, media: text.includes('[表情]') ? 1 : 0 });
+        }
+      }
+      rows.sort((a, b) => a.time - b.time);
+      const msgs = rows.map((m, i) => {
+        const ts = m.time.getTime();
+        return { id: i + 1, uid, pid: p.id, speaker: m.speaker, text: m.text, ts, hash: E.hash(p.id + '|' + m.speaker + '|' + ts + '|' + m.text) };
+      });
+      dbx.messages.push(...msgs);
+      p.msgCount = msgs.length;
+      p.firstMsgAt = msgs.length ? msgs[0].ts : null;
+      p.lastMsgAt = msgs.length ? msgs[msgs.length - 1].ts : null;
+      dbx.partners.push(p);
+      dbx.batches.push({ id: p.id, uid, pid: p.id, source: spec.platform, detected: spec.platform, fileName: '演示数据', added: msgs.length, skipped: 0, total: msgs.length, firstAt: p.firstMsgAt, lastAt: p.lastMsgAt, createdAt: Date.now() - 60 * 1000 });
+      const a = E.analyze(rows, { me: '我' });
+      if (!a.empty) {
+        dbx.reports.push({
+          id: p.id, uid, pid: p.id, mode: spec.mode, score: a.total, dims: a.dims,
+          narrative: a.narrative, review: a.review, forecast: a.forecast, daily: a.daily,
+          count: a.count, firstDay: a.firstDay, lastDay: a.lastDay, createdAt: Date.now()
+        });
+        p.lastAnalysis = a.total;
+      }
+    });
+    return dbx;
+  }
+
+  function enterDemo() {
+    demoMode = true;
+    demoDB = buildDemoDB();
+    try { sessionStorage.setItem(DEMO_KEY, '1'); } catch (e) { }
+    return demoDB.accounts[0];
+  }
+  function leaveDemo() {
+    demoMode = false;
+    demoDB = null;
+    try { sessionStorage.removeItem(DEMO_KEY); } catch (e) { }
+  }
+  function demoAccount() { return demoMode && demoDB ? demoDB.accounts[0] : null; }
+
+  /* ---------------- 云端账号在本地的映射 ----------------
+     云端 id 直接作为本地 uid，账号元数据落到本地 accounts（不含任何凭据）。
+     同一 githubId 复用；provider:'github' 记录不设 pw，杜绝密码登录。 */
+  async function upsertCloudAccount(profile) {
+    if (!profile || !profile.id) throw new Error('云端账号资料不完整');
+    const all = await getAll('accounts');
+    let acc = all.find((a) => (profile.provider === 'github' && a.githubId && a.githubId === profile.github_id) || a.id === profile.id);
+    const now = Date.now();
+    if (!acc) {
+      acc = {
+        id: String(profile.id), email: profile.email || '', name: profile.name || '用户',
+        provider: profile.provider || 'password', githubId: profile.github_id || null, avatar: profile.avatar || null,
+        salt: null, pw: null, pwAlg: null,
+        createdAt: profile.created_at || now, lastLogin: now, loginCount: profile.login_count || 1,
+        partnerCount: profile.partner_count || 0, cloud: true
+      };
+      await add('accounts', acc);
+    } else {
+      acc.lastLogin = now;
+      acc.loginCount = (acc.loginCount || 1) + 1;
+      acc.name = profile.name || acc.name;
+      acc.avatar = profile.avatar || acc.avatar;
+      acc.cloud = true;
+      await put('accounts', acc);
+    }
+    saveSession(acc.id);
+    await log(acc.id, 'cloud_login', acc.email, { provider: acc.provider });
+    return acc;
+  }
+
+  /* ---------------- 访客数据合并（T8）----------------
+     访客数据本来就在本地；登录后把 uid 从旧值批量改成云账号 id。
+     用一个事务完成，失败回滚。这里通过 raw 事务封装实现原子性。 */
+  function migrateUid(fromUid, toUid) {
+    if (fromUid === toUid) return Promise.resolve({ moved: 0 });
+    assertWritable();
+    return db().then((d) => new Promise((resolve, reject) => {
+      const t = d.transaction(['partners', 'messages', 'batches', 'reports'], 'readwrite');
+      let moved = 0;
+      const move = (store, idx) => {
+        const req = store.index(idx).getAll(fromUid);
+        req.onsuccess = () => {
+          (req.result || []).forEach((row) => { row.uid = toUid; store.put(row); moved++; });
+        };
+      };
+      try {
+        move(t.objectStore('partners'), 'uid');
+        move(t.objectStore('messages'), 'uid');
+        move(t.objectStore('batches'), 'uid');
+        move(t.objectStore('reports'), 'uid');
+      } catch (err) { try { t.abort(); } catch (e) { } reject(err); return; }
+      t.oncomplete = () => resolve({ moved });
+      t.onerror = () => reject(t.error);
+      t.onabort = () => reject(t.error || new Error('迁移被中止，已回滚'));
+    }));
+  }
+
+  /* ---------------- 备份 JSON（T8，绝不含 API key）----------------
+     API key 属于 settings 模块的 localStorage，这里只导出 IndexedDB 数据，
+     字段白名单明确排除 pw/salt/pwAlg 等凭据。 */
+  async function exportBackup() {
+    const stores = ['partners', 'messages', 'batches', 'reports', 'grants', 'requests', 'audit', 'meta'];
+    const out = { app: 'CrushLens', version: 2, exportedAt: Date.now(), data: {} };
+    for (const s of stores) out.data[s] = await getAll(s);
+    // 账号只导出非敏感元数据
+    out.data.accounts = (await getAll('accounts')).map((a) => ({
+      id: a.id, email: a.email, name: a.name, provider: a.provider,
+      githubId: a.githubId || null, avatar: a.avatar || null,
+      createdAt: a.createdAt, lastLogin: a.lastLogin, loginCount: a.loginCount
+    }));
+    return out;
+  }
+
+  async function importBackup(payload, replace) {
+    assertWritable();
+    if (!payload || payload.app !== 'CrushLens' || !Array.isArray(payload.data)) throw new Error('备份文件格式不对');
+    const replaceSet = replace ? new Set(String(replace).split(',')) : new Set();
+    const order = ['partners', 'messages', 'batches', 'reports', 'grants', 'requests', 'audit', 'meta', 'accounts'];
+    let n = 0;
+    for (const s of order) {
+      const rows = payload.data[s] || [];
+      if (!Array.isArray(rows)) continue;
+      for (const row of rows) {
+        // 只接受普通对象且主键为原始值；拒绝原型污染载荷与非对象行
+        if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+        if (row.__proto__ !== undefined || 'constructor' in row || 'prototype' in row) continue;
+        if (row.id !== undefined && typeof row.id !== 'string' && typeof row.id !== 'number') continue;
+        if (replaceSet.has(s) && row.id !== undefined) await del(s, row.id);
+        // add 对已有主键会失败；用 put 做幂等恢复
+        await put(s, row); n++;
+      }
+    }
+    await log(null, 'import_backup', '', { rows: n });
+    return { rows: n };
+  }
+
   /* ---------------- 清空（危险操作，需二次确认于 UI） ---------------- */
   async function wipeAccount(uid) {
     const ps = await listPartners(uid);
@@ -674,6 +893,9 @@
     adminOverview, adminUserRows, log,
     broadcast, onBroadcast, seedDemo, wipeAccount, clearChatData,
     getMeta, setMeta, pickColor,
+    // T1/T3/T8
+    assertWritable, isDemo, enterDemo, leaveDemo, demoAccount,
+    upsertCloudAccount, migrateUid, exportBackup, importBackup,
     raw: { getAll, getOne, put, add, del }
   };
 })(window);

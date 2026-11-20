@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - 'web/**'
+      - 'worker/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -30,17 +31,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: 语法检查（web/assets/*.js）
+      - name: 语法检查（web/assets/*.js 与 worker）
         run: |
           set -e
           for f in web/assets/*.js; do
             echo "node --check $f"
             node --check "$f"
           done
-      - name: 引擎与存储单元测试
+          node --check worker/index.js
+      - name: 单元测试与安全回归
         run: |
           node web/tests/engine.test.js
           node web/tests/store.test.js
+          node web/tests/v21.test.js
+          node web/tests/security.test.js
+          node worker/worker.test.mjs
 
   deploy:
     name: 发布 web/ 到 Pages
