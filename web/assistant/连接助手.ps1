@@ -52,6 +52,27 @@ function Test-OriginAllowed([string]$origin) {
   return $false
 }
 
+# ---------- 请求路径归一化（安全关键）----------
+# PowerShell 的 -eq / switch 默认大小写不敏感，但 .NET 的 StartsWith 大小写敏感。
+# 历史上因此出现 "/API/messages" 绕过 token 校验（StartsWith('/api/') 为 False，
+# 但 switch 仍命中 '/api/messages' 分支）的鉴权绕过。所有路由判断统一走这里，
+# 先把路径规范成小写，鉴权与路由使用同一份结果，杜绝大小写分歧。
+function Get-NormalizedPath([string]$rawPath) {
+  $p = $rawPath
+  $p = [System.Text.RegularExpressions.Regex]::Replace($p, '\?.*$', '')
+  $p = $p.TrimEnd('/').ToLowerInvariant()
+  if ([string]::IsNullOrWhiteSpace($p)) { $p = '/' }
+  return $p
+}
+
+# 该路径是否需要 Token。入参允许为原始 target（含 query、任意大小写），
+# 内部先归一化，保证与路由 switch 使用完全一致的判断依据。
+function Test-TokenRequired([string]$rawPath) {
+  $p = Get-NormalizedPath $rawPath
+  if ($p -eq '/api/ping' -or $p -eq '/api/pair') { return $false }
+  return $p.StartsWith('/api/')
+}
+
 # ---------- 扫描范围（默认只扫投递箱） ----------
 $ScanRoots = @(
   @{ path = $Inbox; depth = 3; label = '投递箱' }
@@ -393,9 +414,20 @@ if ($SelfTest) {
     @{ name = '伪装同名的来源应拒绝';       got = (Test-OriginAllowed 'https://him-wang.github.io.evil.io'); want = $false },
     @{ name = '缺少 Origin 的请求应拒绝';   got = (Test-OriginAllowed '');                                     want = $false }
   )
+  # 路径归一化 / Token 判定：大小写与 query 不得造成鉴权分歧（历史绕过回归）
+  $pcases = @(
+    @{ name = '小写受保护路径需 Token';       got = (Test-TokenRequired '/api/messages');          want = $true },
+    @{ name = '全大写受保护路径需 Token';     got = (Test-TokenRequired '/API/MESSAGES');          want = $true },
+    @{ name = '混合大小写受保护路径需 Token'; got = (Test-TokenRequired '/Api/Messages');          want = $true },
+    @{ name = '带 query 的受保护路径需 Token'; got = (Test-TokenRequired '/API/messages?id=x');    want = $true },
+    @{ name = '带尾斜杠的受保护路径需 Token'; got = (Test-TokenRequired '/API/messages/');        want = $true },
+    @{ name = 'ping 公开无需 Token';          got = (Test-TokenRequired '/API/PING');             want = $false },
+    @{ name = 'pair 公开无需 Token';          got = (Test-TokenRequired '/api/pair?code=123456');  want = $false },
+    @{ name = '非 API 路径无需 Token';        got = (Test-TokenRequired '/');                      want = $false }
+  )
   $ScanRoots = $savedRoots
   $fail = 0
-  foreach ($c in ($cases + $ocases)) {
+  foreach ($c in ($cases + $ocases + $pcases)) {
     if ($c.got -eq $c.want) {
       Write-Host ('  [PASS] ' + $c.name) -ForegroundColor Green
     } else {
@@ -491,11 +523,7 @@ while ($loop) {
     $method = $seg[0]
     $target = '/'
     if ($seg.Length -gt 1) { $target = $seg[1] }
-    $pathOnly = $target
-    $qi = $target.IndexOf('?')
-    if ($qi -ge 0) { $pathOnly = $target.Substring(0, $qi) }
-    $pathOnly = $pathOnly.TrimEnd('/')
-    if ([string]::IsNullOrWhiteSpace($pathOnly)) { $pathOnly = '/' }
+    $pathOnly = Get-NormalizedPath $target
 
     $origin = ''
     if ($headers.ContainsKey('origin')) { $origin = $headers['origin'] }
@@ -516,10 +544,7 @@ while ($loop) {
 
     $Script:ReqCount = $Script:ReqCount + 1
 
-    $needToken = $true
-    if ($pathOnly -eq '/api/ping' -or $pathOnly -eq '/api/pair') { $needToken = $false }
-
-    if ($needToken -and $pathOnly.StartsWith('/api/')) {
+    if (Test-TokenRequired $pathOnly) {
       $tk = ''
       if ($headers.ContainsKey('x-bridge-token')) { $tk = $headers['x-bridge-token'] }
       if ($tk -ne $Script:Token) {
