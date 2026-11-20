@@ -13,7 +13,7 @@
 if(!t||['rose','mist','matcha','dusk','night'].indexOf(t)<0){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'night':'rose';}
 document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','rose');}})();
 </script>
-<link rel="stylesheet" href="assets/style.css?v=5fceb15e">
+<link rel="stylesheet" href="assets/style.css?v=5da96037">
 <!-- 换肤 + 动画增强层：只覆盖视觉与动效，不改变任何功能逻辑；删除此行即可回退原样 -->
 <link rel="stylesheet" href="assets/skin.css?v=8eae2b06">
 </head>
@@ -24,14 +24,16 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){document.documen
   <div class="auth-visual">
     <div>
       <div class="brand" style="padding:0">
-        <div class="brand-mark">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>
+        <div class="brand-mark" title="心动镜">
+          <svg class="heart-ecg" width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <g class="bm-reflect" transform="translate(0 25) scale(1 -1)" opacity=".28"><path class="bm-heart" d="M16 26C5 18.5 3 12 6 8.2 9.4 4.2 14.2 5.3 16 8.4c1.8-3.1 6.6-4.2 10-.2 3 3.8 1 10.3-10 17.8Z" fill="currentColor"/></g>
+            <path class="bm-heart" d="M16 24C5 16.5 3 10 6 6.2 9.4 2.2 14.2 3.3 16 6.4c1.8-3.1 6.6-4.2 10-.2 3 3.8 1 10.3-10 17.8Z" fill="currentColor"/>
+            <path class="bm-ecg" d="M3 15h7l2.5-5 4 10 3-6 2.5 2H30"/>
           </svg>
         </div>
         <div class="brand-txt">
           <strong>心动镜</strong>
-          <span style="color:var(--adm-accent)">CONSOLE · 监管台</span>
+          <span style="color:var(--auth-ink-3)">CONSOLE · 监管台</span>
         </div>
       </div>
 
@@ -43,11 +45,11 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){document.documen
       <div class="auth-feats">
         <div class="auth-feat">
           <span class="fi"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg></span>
-          <div><b>总开发者 · 本机唯一</b>首个认领的账号，权限不可转让</div>
+          <div><b>白名单账号 · 服务端校验</b>只有指定的 GitHub 账号能进入，前端绕不过去</div>
         </div>
         <div class="auth-feat">
           <span class="fi"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg></span>
-          <div><b>被分享者 · 按时申请</b>授权到期自动失效，需要再次向总开发者申请</div>
+          <div><b>本机优先 · 离线可用</b>没连云端时退回浏览器本地数据库，数据不出这台机器</div>
         </div>
         <div class="auth-feat">
           <span class="fi"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4h16v16H4zM8 9h8M8 13h5"/></svg></span>
@@ -74,9 +76,11 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){document.documen
 
   <aside class="side" id="side">
     <div class="brand">
-      <div class="brand-mark">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>
+      <div class="brand-mark" title="心动镜">
+        <svg class="heart-ecg" width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <g class="bm-reflect" transform="translate(0 25) scale(1 -1)" opacity=".28"><path class="bm-heart" d="M16 26C5 18.5 3 12 6 8.2 9.4 4.2 14.2 5.3 16 8.4c1.8-3.1 6.6-4.2 10-.2 3 3.8 1 10.3-10 17.8Z" fill="currentColor"/></g>
+          <path class="bm-heart" d="M16 24C5 16.5 3 10 6 6.2 9.4 2.2 14.2 3.3 16 6.4c1.8-3.1 6.6-4.2 10-.2 3 3.8 1 10.3-10 17.8Z" fill="currentColor"/>
+          <path class="bm-ecg" d="M3 15h7l2.5-5 4 10 3-6 2.5 2H30"/>
         </svg>
       </div>
       <div class="brand-txt">
@@ -124,8 +128,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){document.documen
 <script src="assets/engine.js?v=8315edf7"></script>
 <script src="assets/store.js?v=af2d2a15"></script>
 <script src="assets/theme.js?v=8966caa2"></script>
-<script src="assets/api.js?v=47881416"></script>
+<script src="assets/api.js?v=bf727251"></script>
 <script src="assets/ui.js?v=e3df6789"></script>
-<script src="assets/admin.js?v=60b06d7f"></script>
+<script src="assets/admin.js?v=4cc9fdae"></script>
 </body>
 </html>

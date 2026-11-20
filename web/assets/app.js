@@ -118,12 +118,20 @@
       history.replaceState({}, '', location.pathname);
       if (Api && Api.configured()) {
         try {
+          let cb = null;
           if (code && state && Api.githubCallback) {
-            await Api.githubCallback(code, state);
+            cb = await Api.githubCallback(code, state);
           }
           const r = await Api.me();
           if (r && r.account) {
             const acc = await S.upsertCloudAccount(r.account);
+            // 从开发端发起的 GitHub 登录：不留在用户端，直接送回去。
+            // 是不是真能进由 admin.html 再问服务端（同样的白名单）。
+            if ((cb && cb.to === 'admin') || (r && r.admin && sessionStorage.getItem('cl_want_admin') === '1')) {
+              sessionStorage.removeItem('cl_want_admin');
+              location.replace('admin.html');
+              return;
+            }
             await afterCloudLogin(acc, r.account);
             return;
           }

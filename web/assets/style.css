@@ -50,14 +50,6 @@
   --auth-card: rgba(255, 255, 255, .7);
   --auth-ico: #be123c;
 
-  /* 监管台专属（靛蓝身份色，深色下换成亮紫） */
-  --adm-accent: #4338ca;
-  --adm-soft: #eef2ff;
-  --adm-ink: #1e1b4b;
-  --adm-ink2: #3730a3;
-  --adm-ink3: #312e81;
-  --adm-grad: linear-gradient(150deg, #eef2ff 0%, #e0e7ff 34%, #c7d2fe 70%, #a5b4fc 100%);
-
   --r-sm: 10px;
   --r: 16px;
   --r-lg: 22px;
@@ -199,11 +191,6 @@
   --auth-card: rgba(255, 255, 255, .08);
   --auth-ico: #fb7185;
 
-  --adm-accent: #a78bfa;
-  --adm-soft: #2a2340;
-  --adm-ink: #ede9fe;
-  --adm-ink2: #c4b5fd;
-
   /* 直连状态胶囊：深色下不能用浅底 */
   --conn-on-bg: rgba(52, 211, 153, .14);
   --conn-on-fg: #34d399;
@@ -211,8 +198,6 @@
   --conn-off-bg: var(--surface-2);
   --conn-off-fg: var(--ink-2);
   --conn-off-dot: var(--ink-3);
-  --adm-ink3: #ddd6fe;
-  --adm-grad: linear-gradient(150deg, #1c1830 0%, #221d3a 34%, #271f45 70%, #2d2350 100%);
 }
 
 /* 深色下语义色的浅底变体（成功/警告/中性 chip、徽标） */
@@ -962,37 +947,35 @@ body.side-locked { overflow: hidden; }
 }
 
 /* ============================================================
-   开发端（监管台）主题覆盖
-   ============================================================ */
-body.admin { --rose: #4338ca; --rose-2: #818cf8; --rose-soft: #eef2ff; }
-body.admin .brand-mark { background: linear-gradient(140deg, #6366f1, #4338ca 62%, #312e81); box-shadow: 0 6px 16px -6px rgba(67, 56, 202, .6); }
-body.admin .btn.primary { background: linear-gradient(140deg, #6366f1, #4338ca 60%, #3730a3); box-shadow: 0 6px 16px -8px rgba(67, 56, 202, .8); }
-body.admin .kpi-delta.up { color: #4338ca; }
-body.admin .chip.up { background: var(--adm-soft); color: var(--adm-accent); }
-body.admin .trend-svg .line-main,
-body.admin .trend-svg .line-fc { stroke: var(--adm-accent); }
-body.admin .rev.up .rev-ico { background: var(--adm-soft); color: var(--adm-accent); }
-body.admin ::selection { background: var(--adm-soft); color: var(--adm-accent); }
+   开发端（监管台）
+   ------------------------------------------------------------
+   2026-11 起与用户端共用同一套配色与组件：玫瑰主色、心跳 ECG
+   logo、同样的按钮/卡片/表单。开发端不再整体换色，只在文案、
+   徽章和导航上区分身份，避免两个产品看起来像两家公司。
 
-/* 夜间主题下监管台的靛蓝必须提亮，否则深底上对比度不足（如「全部日志 →」链接 2.2:1） */
-[data-theme="night"] body.admin { --rose: #a5b4fc; --rose-2: #818cf8; --rose-soft: #262640; }
-[data-theme="night"] body.admin .brand-mark { background: linear-gradient(140deg, #818cf8, #6366f1 62%, #4338ca); }
-[data-theme="night"] body.admin .btn.primary { background: linear-gradient(140deg, #818cf8, #6366f1 60%, #4f46e5); }
-[data-theme="night"] body.admin .kpi-delta.up { color: #a5b4fc; }
-body.admin .auth-visual {
-  background: var(--adm-grad);
-  color: var(--adm-ink);
+   保留 --adm-* 一组变量只为「权限横幅」等少数语义块留出口，
+   它们现在跟随 --rose 走，主题一切换就一起跟着变。
+   ============================================================ */
+body.admin {
+  /* 让旧的 --adm-* 引用自动跟随主色，不必逐个改引用点 */
+  --adm-accent: var(--rose);
+  --adm-soft: var(--rose-soft);
+  --adm-ink: var(--ink);
+  --adm-ink2: var(--ink-2);
+  --adm-ink3: var(--ink-3);
 }
-body.admin .auth-visual::before { background: radial-gradient(circle, rgba(255,255,255,.85), transparent 62%); }
-body.admin .auth-visual::after { background: radial-gradient(circle, var(--halo-fill), transparent 64%); }
-body.admin .auth-hero p { color: var(--adm-ink3); }
-body.admin .auth-feat { color: var(--adm-ink2); }
-body.admin .auth-feat .fi { color: var(--adm-accent); }
-body.admin .auth-feat b { color: var(--adm-ink); }
-body.admin .brand-txt strong { color: var(--adm-ink); }
-body.admin .auth-foot { color: var(--adm-accent); }
-body.admin .nav-item.active { background: var(--adm-soft); color: var(--adm-accent); }
-body.admin .badge.rose { background: var(--adm-soft); color: var(--adm-accent); }
+body.admin .auth-visual {
+  background: var(--auth-grad);
+  color: var(--auth-ink);
+}
+body.admin .auth-hero p { color: var(--auth-ink-2); }
+body.admin .auth-feat { color: var(--auth-ink-2); }
+body.admin .auth-feat .fi { color: var(--auth-ico); }
+body.admin .auth-feat b { color: var(--auth-ink); }
+body.admin .brand-txt strong { color: var(--auth-ink); }
+body.admin .auth-foot { color: var(--auth-ink-3); }
+body.admin .nav-item.active { background: var(--rose-soft); color: var(--rose); }
+body.admin .badge.rose { background: var(--rose-soft); color: var(--rose); }
 
 /* 权限横幅 */
 .perm-banner {
@@ -1001,8 +984,8 @@ body.admin .badge.rose { background: var(--adm-soft); color: var(--adm-accent); 
   font-size: 12.5px; color: var(--warn-fg); margin-bottom: 16px;
 }
 .perm-banner .pi { width: 30px; height: 30px; border-radius: 9px; background: var(--warn-line); display: grid; place-items: center; flex: none; }
-.perm-banner.owner { border-color: var(--adm-accent); background: var(--adm-soft); color: var(--adm-ink2); }
-.perm-banner.owner .pi { background: var(--adm-grad); color: var(--adm-ink); }
+.perm-banner.owner { border-color: var(--rose); background: var(--rose-soft); color: var(--ink-2); }
+.perm-banner.owner .pi { background: var(--rose-soft); color: var(--rose); }
 
 /* 分段时间 */
 .seg { display: flex; gap: 2px; background: var(--line-2); padding: 3px; border-radius: 10px; }

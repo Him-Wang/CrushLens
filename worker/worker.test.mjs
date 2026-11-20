@@ -34,17 +34,34 @@ function makeD1() {
       return null;
     }
     if (s.startsWith('INSERT INTO accounts')) {
-      const a = { id: b[0], email: b[1], name: b[2], password_hash: b[3], salt: b[4], provider: b[5], github_id: b[6], avatar: b[7], created_at: b[8], last_login: b[9], login_count: b[10], partner_count: b[11] };
+      // 按列名映射，并尊重 VALUES 里的字面量（如 partner_count 写成 0），
+      // 否则占位符与列会静默错位，测试会给出假结论。
+      const m = s.match(/INSERT INTO accounts\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i);
+      const a = { login_count: 0, partner_count: 0 };
+      if (m) {
+        const cols = m[1].split(',').map((c) => c.trim());
+        const vals = m[2].split(',').map((v) => v.trim());
+        let bi = 0;
+        cols.forEach((c, i) => {
+          const v = vals[i];
+          if (v === '?') { a[c] = b[bi++]; }
+          else if (/^null$/i.test(v)) { a[c] = null; }
+          else if (/^-?\d+(\.\d+)?$/.test(v)) { a[c] = Number(v); }
+          else { a[c] = v.replace(/^'|'$/g, ''); }
+        });
+      }
       accounts.set(a.id, a); return null;
     }
     if (s.includes('UPDATE accounts SET password_hash')) {
       const a = findAccount((x) => x.id === b[2]); if (a) { a.password_hash = b[0]; a.salt = b[1]; } return null;
     }
     if (s.includes('INTO sessions')) { sessions.set(b[0], { account_id: b[1], expires_at: b[3] }); return null; }
+    if (s.includes('FROM sessions') && s.startsWith('SELECT')) return sessions.get(b[0]) || null;
+    if (s.startsWith('DELETE FROM sessions')) { sessions.delete(b[0]); return null; }
     return null;
   }
   return {
-    _codes: codes, _accounts: accounts,
+    _codes: codes, _accounts: accounts, _sessions: sessions,
     prepare(sql) {
       const b = [];
       const st = {
@@ -132,6 +149,77 @@ async function call(env, path, { method = 'GET', body, origin = 'http://localhos
   const env = { DB: makeD1(), PEPPER: 'p', SITE_ORIGIN: 'https://him-wang.github.io' };
   const r = await call(env, '/salt?email=a%40b.com', { method: 'GET', origin: '' });
   ok(r.status === 200, 'GET still works without a browser Origin');
+}
+
+// --- 6. 开发端白名单：只有指定 GitHub id 能进（服务端强校验）---
+{
+  const { createHash } = await import('node:crypto');
+  const sha = (s) => createHash('sha256').update(s).digest('hex');
+
+  // 三个账号：白名单里的两个 GitHub 账号 + 一个普通账号
+  const env = { DB: makeD1(), PEPPER: 'p', SITE_ORIGIN: 'http://localhost:5173' };
+  const seed = async (id, email, githubId) => {
+    await env.DB.prepare('INSERT INTO accounts(id,email,name,password_hash,salt,provider,created_at,last_login,login_count,partner_count,github_id,avatar) VALUES(?,?,?,?,?,?,?,?,?,0,?,?)')
+      .bind(id, email, id, null, null, githubId ? 'github' : 'password', Date.now(), Date.now(), 1, githubId, null).run();
+  };
+  await seed('a_him', 'him@example.com', 'gh_106427909');
+  await seed('a_seven', 'seven@example.com', 'gh_355639050');
+  await seed('a_rando', 'rando@example.com', 'gh_999999');
+
+  // 直接种一个已知 token 的会话（token 明文 -> sha256 作 key）
+  const tokOf = (accountId) => {
+    const tok = 'tok_' + accountId;
+    env.DB._sessions.set(sha(tok), { account_id: accountId, expires_at: Date.now() + 3600e3 });
+    return tok;
+  };
+  const asUser = async (tok, path) => {
+    const req = new Request('https://api.test' + path, { method: 'GET', headers: { Origin: 'http://localhost:5173', Cookie: 'cl_session=' + tok } });
+    const res = await worker.fetch(req, env, {});
+    let data = null; try { data = await res.json(); } catch (e) { }
+    return { status: res.status, data };
+  };
+
+  const me_him = await asUser(tokOf('a_him'), '/me');
+  ok(me_him.status === 200 && me_him.data.admin === true, '白名单账号 Him-Wang -> /me admin:true');
+  const me_seven = await asUser(tokOf('a_seven'), '/me');
+  ok(me_seven.status === 200 && me_seven.data.admin === true, '白名单账号 1102-seven -> /me admin:true');
+  const me_rando = await asUser(tokOf('a_rando'), '/me');
+  ok(me_rando.status === 200 && me_rando.data.admin === false, '非白名单账号 -> /me admin:false');
+
+  const list_admin = await asUser(tokOf('a_him'), '/admin/accounts');
+  ok(list_admin.status === 200 && Array.isArray(list_admin.data.accounts), '白名单账号 -> /admin/accounts 200');
+  const list_rando = await asUser(tokOf('a_rando'), '/admin/accounts');
+  ok(list_rando.status === 403, '非白名单账号 -> /admin/accounts 403');
+  ok(!list_rando.data || !list_rando.data.accounts, '非白名单账号拿不到任何账号数据');
+
+  // 未登录
+  const anon = await (async () => {
+    const req = new Request('https://api.test/admin/accounts', { method: 'GET', headers: { Origin: 'http://localhost:5173' } });
+    const res = await worker.fetch(req, env, {});
+    return res.status;
+  })();
+  ok(anon === 401, '未登录 -> /admin/accounts 401');
+
+  // 环境变量 ADMIN_GITHUB_IDS 可追加（不必改代码）
+  const env2 = { DB: makeD1(), PEPPER: 'p', SITE_ORIGIN: 'http://localhost:5173', ADMIN_GITHUB_IDS: 'gh_999999' };
+  await env2.DB.prepare('INSERT INTO accounts(id,email,name,password_hash,salt,provider,created_at,last_login,login_count,partner_count,github_id,avatar) VALUES(?,?,?,?,?,?,?,?,?,0,?,?)')
+    .bind('a_x', 'x@example.com', 'x', null, null, 'github', Date.now(), Date.now(), 1, 'gh_999999', null).run();
+  const tokx = 'tok_x';
+  env2.DB._sessions.set(sha(tokx), { account_id: 'a_x', expires_at: Date.now() + 3600e3 });
+  const req2 = new Request('https://api.test/me', { method: 'GET', headers: { Origin: 'http://localhost:5173', Cookie: 'cl_session=' + tokx } });
+  const r2 = await worker.fetch(req2, env2, {});
+  const d2 = await r2.json();
+  ok(d2.admin === true, 'ADMIN_GITHUB_IDS 环境变量可追加白名单');
+
+  // OWNER_EMAIL 兼容：邮箱命中仍是 admin（老部署不会把自己锁在门外）
+  const env3 = { DB: makeD1(), PEPPER: 'p', SITE_ORIGIN: 'http://localhost:5173', OWNER_EMAIL: 'boss@example.com' };
+  await env3.DB.prepare('INSERT INTO accounts(id,email,name,password_hash,salt,provider,created_at,last_login,login_count,partner_count) VALUES(?,?,?,?,?,?,?,?,?,0)')
+    .bind('a_owner', 'boss@example.com', 'b', 'h', 's', 'password', Date.now(), Date.now(), 1).run();
+  env3.DB._sessions.set(sha('tok_o'), { account_id: 'a_owner', expires_at: Date.now() + 3600e3 });
+  const req3 = new Request('https://api.test/me', { method: 'GET', headers: { Origin: 'http://localhost:5173', Cookie: 'cl_session=tok_o' } });
+  const r3 = await worker.fetch(req3, env3, {});
+  const d3 = await r3.json();
+  ok(d3.admin === true, 'OWNER_EMAIL 邮箱账号仍是 admin（向后兼容）');
 }
 
 console.log(`\n结果：${pass} 通过 / ${fail} 失败`);
