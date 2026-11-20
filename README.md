@@ -156,6 +156,20 @@ Pages 的 source 必须是 **GitHub Actions**（不是「Deploy from a branch」
 
 > 单测不依赖浏览器：`engine.js` 是纯函数模块，`store.test.js` 用最小 IndexedDB 假桩把真实 `store.js` 跑起来。
 
+### 改了 `assets/` 下的文件？一定要跑版本号脚本
+
+GitHub Pages 给静态资源发 `Cache-Control: max-age=600`，浏览器和 CDN 都按**完整 URL** 缓存。
+只改文件内容、不改 `index.html` / `admin.html` 里引用它的 `?v=`，用户就会在最长 10 分钟内（以及 CDN 命中期间）继续拿到旧文件：
+
+```bash
+node tools/stamp-assets.mjs          # 按内容哈希重写所有 ?v=，内容没变则不动
+node tools/stamp-assets.mjs --check  # 只校验；CI 用这个，不一致直接失败
+```
+
+版本号取文件内容的 sha256 前 8 位，因此改了就一定变、没改就保持不变（缓存继续命中）。
+**不要手写日期当版本号**——同一天里改两次资源就会撞车，这正是"部署了却看不到新 UI"最常见的成因。
+CI 的 `verify` job 已接入 `--check`，提交前忘了跑会在流水线上被挡住。
+
 ---
 
 ## 7. 目录结构
@@ -173,10 +187,12 @@ web/                      # v2.0 在线版（发布内容 = 这个目录）
 │   ├── app.js            # 用户端逻辑
 │   ├── admin.js          # 监管台逻辑
 │   ├── style.css         # 样式系统
+│   ├── skin.css          # 动效增强层（只叠动画/质感，不改结构）
 │   ├── vendor/           # tesseract.js + wasm 内核 + 第三方许可证（见 NOTICE.md）
 │   └── tessdata/         # 中文 OCR 语言包（20MB，随仓库分发）
 ├── assistant/            # Windows 连接助手（PowerShell，零依赖）
 └── tests/                # 引擎 / 存储白盒测试
+tools/stamp-assets.mjs    # 按内容哈希重写 HTML 里的 ?v= 版本号（防缓存）
 legacy/index.html         # 旧版 v1.3 单文件网页版，仅留存
 src/                      # 桌面版（C# WinForms）源码
 screenshots/              # 桌面版界面截图

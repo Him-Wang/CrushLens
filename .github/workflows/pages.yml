@@ -10,6 +10,7 @@ on:
     paths:
       - 'web/**'
       - 'worker/**'
+      - 'tools/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -47,6 +48,8 @@ jobs:
           node web/tests/security.test.js
           node web/tests/ui.test.js
           node worker/worker.test.mjs
+      - name: 资源版本号与内容一致（防缓存穿透）
+        run: node tools/stamp-assets.mjs --check
 
   deploy:
     name: 发布 web/ 到 Pages
