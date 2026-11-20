@@ -232,7 +232,7 @@
       btn.disabled = true; btn.textContent = '发送中…';
       try {
         const r = await Api.sendCode(email);
-        toast(r.sent ? '验证码已发送，查收邮箱' : ('验证码已生成：' + (r.devCode || '') + '（' + (r.reason || '未配置邮件服务') + '）'), r.sent ? '' : 'warn');
+        toast(r.sent ? '验证码已发送，请查收邮箱' : '验证码发送失败，请稍后重试', r.sent ? '' : 'warn');
       } catch (e) { setAuthErr(e.message); }
       finally { btn.disabled = false; btn.textContent = old; }
     };

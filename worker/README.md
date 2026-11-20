@@ -23,7 +23,8 @@ wrangler d1 execute crushlens --remote --file=./schema.sql
 # 2) 写密钥（永远不要提交到仓库）
 wrangler secret put GH_CLIENT_ID       # GitHub OAuth App 的 Client ID
 wrangler secret put GH_CLIENT_SECRET   # GitHub OAuth App 的 Client secret
-wrangler secret put BREVO_KEY          # Brevo SMTP API key
+- `BREVO_KEY` 是**必需**的：未配置时邮箱注册/密码找回返回 503 且不发码（绝不把验证码回传前端——那会让任何人重置他人密码）。GitHub 登录不依赖 Brevo。
+
 wrangler secret put PEPPER             # 随机长串：openssl rand -hex 32
 wrangler secret put OWNER_EMAIL        # 总开发者邮箱（/admin/accounts 仅此邮箱可读）
 
@@ -64,5 +65,4 @@ Worker 只做一次 `HMAC-SHA256(pepper, stretched+salt)` 存库。`stretched` �
 
 ## 配额降级
 
-Brevo 免费额度用尽时 `/email/code` 返回 `{sent:false, reason}`，前端显示明确文案，
-绝不白屏。D1 额度极难触顶（5GB / 500 万行读/天）。
+Brevo 免费额度用尽时 `/email/code` 返回非 2xx，前端显示明确文案，绝不白屏。D1 额度极难触顶（5GB / 500 万行读/天）。

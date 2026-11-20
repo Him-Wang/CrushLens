@@ -61,6 +61,16 @@ function timingSafeEqual(a, b) {
 }
 function validEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '').trim().toLowerCase()); }
 
+// Cryptographically secure 6-digit code. Rejection sampling avoids modulo bias
+// (never derive auth codes from Math.random()).
+function random6Digit() {
+  const a = new Uint32Array(1);
+  const span = 900000;
+  const limit = Math.floor(4294967296 / span) * span;
+  do { crypto.getRandomValues(a); } while (a[0] >= limit);
+  return String(100000 + (a[0] % span));
+}
+
 /* ---------------- request helpers ---------------- */
 async function body(req) {
   try { return await req.json(); } catch (e) { return {}; }
@@ -240,12 +250,20 @@ export default {
         if (!one.ok) return fail(429, '同一个邮箱每分钟只能发一次验证码', origin);
         const ten = await rateHit(env, 'code:10m:' + email, 5, 10 * 60 * 1000);
         if (!ten.ok) return fail(429, '这个邮箱 10 分钟内请求太多了', origin);
-        const code = String(Math.floor(100000 + Math.random() * 900000));
+        // Email verification is only available when real mail delivery is
+        // configured. Never hand the code back to the browser: the same code
+        // authorizes /register AND /password/reset, so returning it would let
+        // anyone reset another account's password (account takeover).
+        if (!env.BREVO_KEY) {
+          return fail(503, '邮件服务未配置，邮箱注册/找回暂不可用；请配置 BREVO_KEY 或改用 GitHub 登录', origin);
+        }
+        const code = random6Digit();
         const now = Date.now();
         await env.DB.prepare('INSERT INTO codes(email,code_hash,expires_at,tries,created_at) VALUES(?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET code_hash=excluded.code_hash, expires_at=excluded.expires_at, tries=0, created_at=excluded.created_at')
           .bind(email, await hmacHex(env.PEPPER, code + '|' + email), now + CODE_TTL, 0, now).run();
-        const mail = await sendCodeMail(env, email, code);
-        return json({ ok: true, sent: mail.sent, reason: mail.reason || null, devCode: env.BREVO_KEY ? undefined : code }, 200, origin);
+        await sendCodeMail(env, email, code);
+        // Only a boolean ack — no code, no reason string with mail internals.
+        return json({ ok: true, sent: true }, 200, origin);
       }
 
       /* ---------- salt (browser stretches password) ---------- */
