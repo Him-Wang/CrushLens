@@ -35,7 +35,12 @@ const REF = /(assets\/[A-Za-z0-9._-]+\.(?:js|css))\?v=([A-Za-z0-9._-]+)/g;
 /** 计算文件的短哈希；文件不存在返回 null（由调用方报错，不要静默跳过） */
 function stampOf(relPath) {
   try {
-    return createHash('sha256').update(readFileSync(join(WEB, relPath))).digest('hex').slice(0, 8);
+    // 必须统一行尾再算哈希：仓库没有 .gitattributes，Windows 上 core.autocrlf=true
+    // 会把检出内容变成 CRLF，而 CI 是 Linux/LF。同一份文件算出两个哈希，
+    // 本地 --check 通过、CI 却失败（反之亦然）。归一化成 LF 后两边一致。
+    // 浏览器发送前本来就会把 CSS/JS 的 CRLF 视为等价空白，所以这么做不影响语义。
+    const text = readFileSync(join(WEB, relPath), 'utf8').replace(/\r\n/g, '\n');
+    return createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 8);
   } catch {
     return null;
   }
