@@ -21,15 +21,17 @@ function allowedOrigin(origin) {
   return /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
 }
 function cors(origin) {
-  const h = {
-    'Access-Control-Allow-Origin': allowedOrigin(origin) ? origin : 'null',
+  // 只允许白名单来源；对非法/缺失来源完全不返回 CORS 头，
+  // 浏览器会自行阻止跨源读取。绝不 reflect 'null' 同时带 Allow-Credentials。
+  if (!allowedOrigin(origin)) return { 'Vary': 'Origin' };
+  return {
+    'Access-Control-Allow-Origin': origin,
     'Vary': 'Origin',
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '600'
   };
-  return h;
 }
 function json(body, status, origin, extraHeaders) {
   const h = new Headers();
@@ -167,9 +169,11 @@ export default {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: cors(origin) });
     }
-    // CSRF-ish guard for state-changing API calls from other origins.
+    // CSRF guard: 所有会改变状态的 API 请求必须来自白名单 Origin。
+    // 同源请求（GET / 或页面本身）没有 Origin；但状态变更请求若缺失 Origin
+    // 说明是非浏览器客户端，一律拒绝（浏览器 POST 一定会带 Origin）。
     const isApi = path !== '/gh/login' && path !== '/gh/callback';
-    if (isApi && request.method !== 'GET' && origin && !allowedOrigin(origin)) {
+    if (isApi && request.method !== 'GET' && !allowedOrigin(origin)) {
       return fail(403, '来源不被允许', origin);
     }
 

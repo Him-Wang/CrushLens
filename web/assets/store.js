@@ -836,14 +836,19 @@
 
   async function importBackup(payload, replace) {
     assertWritable();
-    if (!payload || payload.app !== 'CrushLens' || !payload.data) throw new Error('备份文件格式不对');
+    if (!payload || payload.app !== 'CrushLens' || !Array.isArray(payload.data)) throw new Error('备份文件格式不对');
     const replaceSet = replace ? new Set(String(replace).split(',')) : new Set();
     const order = ['partners', 'messages', 'batches', 'reports', 'grants', 'requests', 'audit', 'meta', 'accounts'];
     let n = 0;
     for (const s of order) {
       const rows = payload.data[s] || [];
+      if (!Array.isArray(rows)) continue;
       for (const row of rows) {
-        if (replaceSet.has(s)) await del(s, row.id);
+        // 只接受普通对象且主键为原始值；拒绝原型污染载荷与非对象行
+        if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+        if (row.__proto__ !== undefined || 'constructor' in row || 'prototype' in row) continue;
+        if (row.id !== undefined && typeof row.id !== 'string' && typeof row.id !== 'number') continue;
+        if (replaceSet.has(s) && row.id !== undefined) await del(s, row.id);
         // add 对已有主键会失败；用 put 做幂等恢复
         await put(s, row); n++;
       }

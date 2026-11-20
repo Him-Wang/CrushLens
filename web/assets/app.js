@@ -2405,7 +2405,7 @@
     }));
     aiCtx = {
       score: a.total, dims: a.dims, momentum: a.momentum,
-      turningPoints: (a.changePoints || []).slice(0, 8).map((p) => ({ date: p.date, delta: p.delta })),
+      turningPoints: (a.changePoints || []).slice(0, 8).map((p) => ({ date: p.date, delta: p.diff })),
       lastTurns: turns, partner: partner && partner.name
     };
     b.onclick = () => {

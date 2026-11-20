@@ -107,5 +107,32 @@ async function call(env, path, { method = 'GET', body, origin = 'http://localhos
   } finally { globalThis.fetch = origFetch; }
 }
 
+// --- 3. CORS: disallowed origin gets no ACAO header, no credentials ---
+{
+  const env = { DB: makeD1(), PEPPER: 'p', SITE_ORIGIN: 'https://him-wang.github.io' };
+  const r = await call(env, '/email/code', { method: 'POST', origin: 'https://evil.example', body: { email: 'a@b.com' } });
+  ok(r.status === 403, 'disallowed origin POST -> 403');
+  ok(r.headers.get('Access-Control-Allow-Origin') === null, 'no ACAO header for disallowed origin');
+  ok(r.headers.get('Access-Control-Allow-Credentials') === null, 'no Allow-Credentials for disallowed origin');
+}
+
+// --- 4. CSRF: state-changing request with NO Origin is rejected ---
+{
+  const env = { DB: makeD1(), PEPPER: 'p', SITE_ORIGIN: 'https://him-wang.github.io' };
+  const req = new Request('https://api.test/email/code', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'a@b.com' })
+  });
+  const res = await worker.fetch(req, env, {});
+  ok(res.status === 403, 'POST without Origin -> 403 (no-Origin bypass closed)');
+}
+
+// --- 5. GET is not blocked by the origin guard (public salt lookup) ---
+{
+  const env = { DB: makeD1(), PEPPER: 'p', SITE_ORIGIN: 'https://him-wang.github.io' };
+  const r = await call(env, '/salt?email=a%40b.com', { method: 'GET', origin: '' });
+  ok(r.status === 200, 'GET still works without a browser Origin');
+}
+
 console.log(`\n结果：${pass} 通过 / ${fail} 失败`);
 process.exit(fail ? 1 : 0);
