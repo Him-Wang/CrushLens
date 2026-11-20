@@ -264,7 +264,7 @@ screenshots/              # 桌面版界面截图
 - **GitHub 登录**：一键授权，服务端中转（浏览器直连 GitHub OAuth 接口会被 404 + 无 CORS 拒绝）。`client_secret` 只放在 Worker secret，前端不接触任何 token。
 - **邮箱账号**：浏览器做 10 万次 PBKDF2 拉伸，Worker 只做一次 HMAC，绕开 Workers Free 的 10ms CPU 上限；验证码由 Brevo 免费额度发送。
 - **本机助手**：下载 `web/assistant/心动镜连接助手-v2.zip`（含启动器），解压双击即可；失败态按「未启动 / 超时 / 浏览器拦截本机地址 / 未配对」分别提示。
-- **微信记录读取器**：独立工具，见 `web/tools/wechat-reader/README.md`。只读内存、不开端口、不写注册表。
+- **聊天记录导入**：微信 / QQ 等聊天数据库是加密的，请用应用自带的「导出聊天记录」功能生成 txt / csv / json / md，放进本机助手的投递箱，即可一键导入分析。
 - **演示模式**：未注册也能「先看看效果 →」，数据全在内存，刷新即消失。
 - **模型接入**：设置里填 Base URL / 模型 ID / API key，可测试连接；不填 key 时复盘退回本地规则文案。API key 默认只在内存，备份 JSON 永不导出 key。
 

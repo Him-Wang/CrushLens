@@ -1819,7 +1819,6 @@
           <p>点下面按钮，页面先探测助手是否已启动，然后让你输入那 6 位配对码即可接通。</p>
           <button class="btn primary sm" id="bGotIt">${icon('wifi', 14)} 我下载好了，现在连接</button>
           <div class="tiny muted mt8" style="margin-top:8px">如果 Windows / 浏览器问「允许访问你的本地网络」，点【允许】。</div>
-          <div class="bridge-sub-links" style="margin-top:8px">微信记录读取器：<a href="tools/wechat-reader/心动镜微信记录读取器-v1.0.0.zip" download="心动镜微信记录读取器-v1.0.0.zip">下载 v1.0.0（约 40KB）</a></div>
         </div>
       </div>
 
