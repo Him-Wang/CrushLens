@@ -96,6 +96,12 @@ body{
   transform:translateY(-2px);
   box-shadow:0 2px 6px rgba(23,21,26,.05),0 20px 44px -22px rgba(23,21,26,.3);
 }
+/* 首个 KPI 卡在 style.css:1290 用 .grid.g4 .kpi:first-child(0,3,1) 定了 scale(1.02)，
+   特异性高于 .card:hover(0,2,0)，会把上面的 translateY 整个压掉；这里用同等特异性显式合并。 */
+.grid.g4 .kpi:first-child:hover{
+  transform:scale(1.02) translateY(-2px);
+  box-shadow:0 2px 6px rgba(23,21,26,.05),0 20px 44px -22px rgba(23,21,26,.3);
+}
 .appcard:hover,.perm-card:hover{transform:translateY(-2px)}
 table.tb tbody tr:hover{background:var(--surface-2)}
 
