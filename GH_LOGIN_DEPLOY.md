@@ -18,8 +18,9 @@
 2. 填写：
    - Application name：`CrushLens`
    - Homepage URL：`https://him-wang.github.io/CrushLens/`
-   - **Authorization callback URL**：`https://crushlens-api.<你的子域>.workers.dev/gh/callback`
-     （`<你的子域>` 就是第 3 步 wrangler 部署时让你填的 Worker 名字；回调 URL 必须和 Worker 实际地址完全一致， GitHub 会严格匹配。）
+   - **Authorization callback URL**：`https://him-wang.github.io/CrushLens/?gh=1`
+     （注意：回调是**站点地址**不是 Worker 地址！Worker 的 `/gh/login` 把 GitHub 的 `redirect_uri` 设成 `SITE_ORIGIN + '/?gh=1'`，GitHub 授权完会把 `code`/`state` 带回到站点这个地址，站点前端再转交给 Worker 换 token。必须和这个地址完全一致，GitHub 才会放行。）
+     > 若 GitHub 报 `redirect_uri_mismatch`，把回调 URL 改成不带查询串的 `https://him-wang.github.io/CrushLens/` 再试——GitHub 对查询串的匹配规则有时较严格。
 3. 创建后记下 **Client ID**，点 **Generate a new client secret** 记下 **Client secret**（只显示一次）。
 
 ---
@@ -74,8 +75,7 @@ wrangler secret put PEPPER            # 随便一个长随机串，如 openssl r
 wrangler secret put OWNER_EMAIL       # 你的邮箱，/admin/accounts 管理员入口用
 ```
 
-`SITE_ORIGIN` 是普通变量，`wrangler.toml` 里已写死 `https://him-wang.github.io`，不用动。
-`MAIL_FROM` 里 `no-reply@crushlens.workers.dev` 若未验证，改成第 2 步验证过的发件邮箱。
+`SITE_ORIGIN` 是普通变量，`wrangler.toml` 里已写死 `https://him-wang.github.io/CrushLens`（**不带结尾斜杠**），不用动。`MAIL_FROM` 里 `no-reply@crushlens.workers.dev` 若未验证，改成第 2 步验证过的发件邮箱。
 
 ### 3.4 部署
 
@@ -99,7 +99,7 @@ wrangler deploy
 
 ## 第 5 步：GitHub OAuth 回调 URL 对齐
 
-回到第 1 步建的 OAuth App，确认 **Authorization callback URL** 与第 3.4 步的实际 Worker 地址完全一致（含 `/gh/callback`）。不一致就改过来。
+回到第 1 步建的 OAuth App，确认 **Authorization callback URL** 是 `https://him-wang.github.io/CrushLens/?gh=1`（站点地址，不是 Worker 地址）。这是 Worker 里 `redirect_uri = SITE_ORIGIN + '/?gh=1'` 决定的，两边必须完全一致。不一致就改过来。
 
 ---
 
