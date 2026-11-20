@@ -10,7 +10,7 @@ compatibility_date = "2026-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "crushlens"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "04f9772c-6506-428d-bdd1-f5d02c59ff10"
 
 [vars]
 SITE_ORIGIN = "https://him-wang.github.io/CrushLens"
