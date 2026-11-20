@@ -28,48 +28,39 @@
     }
   };
 
-  /* ================= 主题面板 + 昼夜滑块（T7.2） ================= */
-  const THEME_DOTS = [
-    { id: 'rose', color: '#e11d48', label: '玫瑰' },
-    { id: 'mist', color: '#2563eb', label: '雾蓝' },
-    { id: 'matcha', color: '#059669', label: '抹茶' },
-    { id: 'dusk', color: '#ea580c', label: '黄昏' },
-    { id: 'night', color: '#1e293b', label: '夜间' }
-  ];
+  /* ================= 主题悬浮按钮：点击循环切换（T7.2） ================= */
+  const THEME_CYCLE = ['rose', 'mist', 'matcha', 'dusk', 'night'];
+  const THEME_META = {
+    rose: { label: '玫瑰', color: '#e11d48' },
+    mist: { label: '雾蓝', color: '#2563eb' },
+    matcha: { label: '抹茶', color: '#059669' },
+    dusk: { label: '黄昏', color: '#ea580c' },
+    night: { label: '夜间', color: '#1e293b' }
+  };
 
-  function wireThemePanel() {
-    const panel = $('#themePanel'), fab = $('#themeFab'), dots = $('#tpDots');
-    if (!panel || !fab || !dots) return;
-    if (!dots.dataset.built) {
-      dots.innerHTML = THEME_DOTS.map((t) =>
-        `<button class="tp-dot" data-theme-id="${t.id}" title="${t.label}" aria-label="${t.label}" style="background:${t.color}"></button>`).join('');
-      dots.dataset.built = '1';
-      $$('.tp-dot').forEach((b) => b.onclick = () => {
-        CLTheme.apply(b.dataset.themeId);
-        toast('主题：' + THEME_DOTS.find((t) => t.id === b.dataset.themeId).label);
-        renderThemePanelState();
-      });
-      $('#tpFollow').onclick = () => { CLTheme.apply('system'); toast('已跟随系统'); renderThemePanelState(); syncDayNight(); };
-    }
-    const toggle = (force) => {
-      const show = force === undefined ? panel.hidden : force;
-      panel.hidden = !show;
-      if (show) renderThemePanelState();
+  // 点一下换一个主题色，不再弹出下拉面板
+  function wireThemeFab() {
+    const fab = $('#themeFab');
+    if (!fab) return;
+    const dot = fab.querySelector('.fab-dot');
+    const paint = () => {
+      const cur = CLTheme.current();
+      const meta = THEME_META[cur] || THEME_META.rose;
+      if (dot) dot.style.background = meta.color;
+      fab.title = '主题：' + meta.label + '（点击切换）';
+      fab.setAttribute('aria-label', fab.title);
     };
-    fab.onclick = () => toggle();
-    fab.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
-    document.addEventListener('click', (e) => {
-      if (panel.hidden) return;
-      if (!panel.contains(e.target) && e.target !== fab && !fab.contains(e.target)) toggle(false);
-    });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) toggle(false); });
-    renderThemePanelState();
-  }
-
-  function renderThemePanelState() {
-    const manual = CLTheme.isManual(), cur = CLTheme.current();
-    $$('.tp-dot').forEach((b) => b.classList.toggle('active', manual && b.dataset.themeId === cur));
-    const f = $('#tpFollow'); if (f) f.classList.toggle('active', !manual);
+    const cycle = () => {
+      const i = THEME_CYCLE.indexOf(CLTheme.current());
+      const next = THEME_CYCLE[(i + 1) % THEME_CYCLE.length];
+      CLTheme.apply(next);
+      toast('主题：' + THEME_META[next].label);
+      paint();
+    };
+    fab.onclick = cycle;
+    fab.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cycle(); } };
+    CLTheme.onChange(paint);
+    paint();
   }
 
   // 昼夜滑块：左=浅色(rose) 中=跟随系统 右=深色(night)，拖动即时生效并持久化
@@ -94,7 +85,6 @@
       $('#dnLabel').textContent = pos === 1 ? '跟随系统' : (pos === 2 ? '深色' : '浅色');
       if (pos === 1) CLTheme.apply('system');
       else CLTheme.apply(pos === 2 ? 'night' : 'rose');
-      renderThemePanelState();
     };
     d.addEventListener('pointerdown', (e) => { dragging = true; d.setPointerCapture(e.pointerId); applyX(e.clientX); });
     d.addEventListener('pointermove', (e) => { if (dragging) applyX(e.clientX); });
@@ -109,7 +99,6 @@
       d.dataset.pos = String(pos);
       $('#dnLabel').textContent = pos === 1 ? '跟随系统' : (pos === 2 ? '深色' : '浅色');
       if (pos === 1) CLTheme.apply('system'); else CLTheme.apply(pos === 2 ? 'night' : 'rose');
-      renderThemePanelState();
     });
     syncDayNight();
     CLTheme.onChange(syncDayNight);
@@ -203,6 +192,7 @@
   function showAuth() {
     $('#auth').hidden = false;
     $('#app').hidden = true;
+    const fab = $('#themeFab'); if (fab) fab.hidden = true; // 登录页不显示主题悬浮按钮
     let mode = 'login';
     if (S.wasSessionExpired && S.wasSessionExpired()) {
       $('#authSub').textContent = '登录已过期（7 天未使用）。重新登录，之前的数据还在。';
@@ -332,6 +322,7 @@
     state.role = await S.roleOf(acc);
     $('#auth').hidden = true;
     $('#app').hidden = false;
+    const fab = $('#themeFab'); if (fab) fab.hidden = false; // 进入应用后才显示主题悬浮按钮
 
     $('#meName').textContent = acc.name;
     $('#meAvatar').textContent = String(acc.name || '?').slice(0, 1);
@@ -383,7 +374,7 @@
       syncDayNight();
       if (state.view) goto(state.view, { quiet: true });
     });
-    wireThemePanel();
+    wireThemeFab();
     wireDayNight();
     $('#demoRegisterBtn').onclick = leaveDemoToRegister;
 

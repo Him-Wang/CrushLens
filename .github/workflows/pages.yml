@@ -45,6 +45,7 @@ jobs:
           node web/tests/store.test.js
           node web/tests/v21.test.js
           node web/tests/security.test.js
+          node web/tests/ui.test.js
           node worker/worker.test.mjs
 
   deploy:
