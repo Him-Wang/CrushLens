@@ -2500,7 +2500,7 @@
         <h3 style="font-size:14px;margin:0 0 4px">云端账号</h3>
         <p class="small muted mt6">云端只存账号信息（邮箱、昵称、导入次数统计），聊天记录永远只在本机。</p>
         <div class="field mt12"><label>云端接口地址（Worker）</label>
-          <input class="input" id="cBase" value="${esc(apiBase)}" placeholder="https://crushlens-api.xxx.workers.dev"></div>
+          <input class="input" id="cBase" value="${esc(apiBase)}" placeholder="留空则使用官方默认地址"></div>
         <div class="row mt8" style="gap:8px">
           <button class="btn ghost sm" id="cSave">保存地址</button>
           <button class="btn ghost sm" id="cMe">查看云端账号</button>

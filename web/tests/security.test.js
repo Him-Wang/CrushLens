@@ -122,6 +122,24 @@ function loadApi() {
   ok(url.indexOf('state=the-state') >= 0, '带上 state 参数');
   ok(calls[0].opts.credentials === 'include', '携带 credentials:include 以接收会话 Cookie');
 
+  section('4. 云端接口地址默认预置（免手填）');
+  {
+    const ls = new Map(); // 空 localStorage = 新用户首次打开
+    globalThis.localStorage = {
+      getItem: (k) => (ls.has(k) ? ls.get(k) : null),
+      setItem: (k, v) => ls.set(k, String(v)),
+      removeItem: (k) => ls.delete(k)
+    };
+    globalThis.fetch = () => Promise.reject(new Error('no network'));
+    globalThis.location = { href: '' };
+    new Function('window', read('api.js'))(globalThis);
+    const A = globalThis.CLApi;
+    ok(A.base() === 'https://crushlens-api.crushlens.workers.dev', '未配置时 base() 返回已部署的官方地址');
+    ok(A.configured() === true, '新用户默认即视为已配置，登录按钮可直接用');
+    A.setBase('https://custom.example.com');
+    ok(A.base() === 'https://custom.example.com', '用户自定义地址可覆盖默认值');
+  }
+
   console.log('\n────────────────────────────────────────────');
   console.log('结果：' + pass + ' 通过 / ' + fail + ' 失败');
   process.exit(fail === 0 ? 0 : 1);

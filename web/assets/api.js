@@ -5,16 +5,17 @@
  *   GitHub token / gho_ / github_pat_ / Brevo key。
  * - 密码在这里用 crypto.subtle 做 10 万次 PBKDF2 拉伸，Worker
  *   只做一次 HMAC，绕开 Workers Free 10ms CPU 上限。
- * - Worker 地址可配置（存 localStorage），默认空 = 未配置。
+ * - Worker 地址预置为已部署的官方实例；用户在 localStorage 覆盖后以其为准。
  * ============================================================ */
 (function (root) {
   'use strict';
 
   const BASE_KEY = 'cl_api_base';
+  const DEFAULT_BASE = 'https://crushlens-api.crushlens.workers.dev';
   const enc = new TextEncoder();
 
   function base() {
-    try { return (localStorage.getItem(BASE_KEY) || '').replace(/\/$/, ''); } catch (e) { return ''; }
+    try { return (localStorage.getItem(BASE_KEY) || DEFAULT_BASE).replace(/\/$/, ''); } catch (e) { return DEFAULT_BASE; }
   }
   function configured() { return !!base(); }
   function setBase(url) {
@@ -116,7 +117,7 @@
   }
 
   root.CLApi = {
-    BASE_KEY, base, configured, setBase, stretch, req,
+    BASE_KEY, DEFAULT_BASE, base, configured, setBase, stretch, req,
     sendCode, register, login, resetPassword, logout, me, adminAccounts, syncCounts, githubLogin, githubCallback
   };
 })(window);
