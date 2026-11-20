@@ -104,9 +104,10 @@
   // GitHub 登录：整页跳转到 Worker；授权后 GitHub 带 code/state 回到站点 /?gh=1，
   // 前端 boot() 再调用 githubCallback 把 code/state 转交服务端换取会话 Cookie。
   // 前端全程不接触 access_token / client_secret。
-  function githubLogin() {
+  // to='admin' 时由 Worker 记住回跳目标，登录完成后前端把用户送到开发端。
+  function githubLogin(to) {
     if (!configured()) throw new Error('还没有配置云端接口地址');
-    location.href = base() + '/gh/login';
+    location.href = base() + '/gh/login' + (to ? '?to=' + encodeURIComponent(to) : '');
   }
 
   // 把 GitHub 回调的 code/state 转交 Worker。服务端用它换 token（client_secret

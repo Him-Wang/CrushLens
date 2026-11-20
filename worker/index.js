@@ -131,6 +131,33 @@ async function rateHit(env, bucket, limit, windowMs) {
   return { ok: true, remaining: limit - row.count - 1 };
 }
 
+/* ---------------- 开发端白名单（唯一可信的权限边界） ----------------
+   只有这里列出的 GitHub 账号能进开发端。前端那份校验只是体验层，
+   真正的门在这——前端改一行绕过它也拿不到 /admin/* 的任何数据。
+
+   用不可变的 GitHub 数字 id，不用 login：login 可以改名，id 不能。
+   Him-Wang    -> 106427909
+   1102-seven  -> 355639050
+   额外可用环境变量 ADMIN_GITHUB_IDS（逗号分隔）追加，不必改代码。 */
+const ADMIN_GITHUB_IDS = ['gh_106427909', 'gh_355639050'];
+
+function adminIdSet(env) {
+  const set = new Set(ADMIN_GITHUB_IDS);
+  String((env && env.ADMIN_GITHUB_IDS) || '')
+    .split(',').map((s) => s.trim()).filter(Boolean)
+    .forEach((s) => set.add(s.startsWith('gh_') ? s : 'gh_' + s));
+  return set;
+}
+
+/* 该账号是否允许进开发端。OWNER_EMAIL 仍作为兼容通道，
+   让已在用旧配置的部署不至于把自己锁在门外。 */
+function isAdminAccount(env, acc) {
+  if (!acc) return false;
+  if (acc.github_id && adminIdSet(env).has(String(acc.github_id))) return true;
+  const owner = String((env && env.OWNER_EMAIL) || '').trim().toLowerCase();
+  return !!(owner && acc.email && String(acc.email).trim().toLowerCase() === owner);
+}
+
 /* ---------------- account whitelist (NO chat content) ---------------- */
 function publicAccount(a) {
   return {
@@ -182,18 +209,21 @@ export default {
       if (path === '/gh/login') {
         if (!env.GH_CLIENT_ID) return new Response('GitHub 登录尚未配置（缺少 GH_CLIENT_ID）', { status: 503 });
         const state = randHex(16);
-        const redirect = env.SITE_ORIGIN + '/#/gh/callback';
         const auth = new URL('https://github.com/login/oauth/authorize');
         auth.searchParams.set('client_id', env.GH_CLIENT_ID);
         auth.searchParams.set('redirect_uri', env.SITE_ORIGIN + '/?gh=1'); // callback proxy below
         auth.searchParams.set('scope', 'read:user user:email');
         auth.searchParams.set('state', state);
         auth.searchParams.set('allow_signup', 'true');
+        // to=admin 让开发端也能走同一个 GitHub 入口，回来后落到 admin.html。
+        // 只接受固定白名单值，避免被当成开放重定向。
+        const to = url.searchParams.get('to') === 'admin' ? 'admin' : '';
+        const stateVal = to ? state + '.admin' : state;
         return new Response(null, {
           status: 302,
           headers: {
             'Location': auth.toString(),
-            'Set-Cookie': `cl_oauth_state=${state}; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=None`
+            'Set-Cookie': `cl_oauth_state=${stateVal}; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=None`
           }
         });
       }
@@ -201,7 +231,11 @@ export default {
         const code = url.searchParams.get('code');
         const state = url.searchParams.get('state');
         const saved = cookieValue(request, 'cl_oauth_state');
-        if (!code || !state || !saved || state !== saved) return fail(400, '登录状态校验失败，请重试', origin);
+        if (!code || !state || !saved) return fail(400, '登录状态校验失败，请重试', origin);
+        // 开发端登录时 cookie 里是 "<state>.admin"，比对前半段
+        const savedBase = String(saved).split('.')[0];
+        if (state !== saved && state !== savedBase) return fail(400, '登录状态校验失败，请重试', origin);
+        const wantAdmin = String(saved).indexOf('.admin') > 0;
         if (!env.GH_CLIENT_ID || !env.GH_CLIENT_SECRET) return fail(503, 'GitHub 登录尚未配置', origin);
         // exchange code -> token (server-side only; never exposed to browser)
         const tr = await fetch('https://github.com/login/oauth/access_token', {
@@ -234,7 +268,7 @@ export default {
         }
         // Clear the oauth state cookie and set the session cookie together.
         const token = await issueSession(env, acc.id);
-        return json({ ok: true, account: publicAccount(acc) }, 200, origin, {
+        return json({ ok: true, account: publicAccount(acc), admin: isAdminAccount(env, acc), to: wantAdmin ? 'admin' : '' }, 200, origin, {
           'Set-Cookie': [
             `cl_oauth_state=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None`,
             sessionCookie(token, Math.floor(SESSION_TTL / 1000))
@@ -378,15 +412,16 @@ export default {
         if (!id) return fail(401, '未登录', origin);
         const acc = await env.DB.prepare('SELECT * FROM accounts WHERE id=?').bind(id).first();
         if (!acc) return fail(401, '账号不存在', origin);
-        return json({ account: publicAccount(acc) }, 200, origin);
+        // admin 由服务端判定，前端只读结果——前端自己算的不作数
+        return json({ account: publicAccount(acc), admin: isAdminAccount(env, acc) }, 200, origin);
       }
 
-      /* ---------- admin: cloud accounts (owner only, metadata only) ---------- */
+      /* ---------- admin: cloud accounts (admin whitelist only) ---------- */
       if (path === '/admin/accounts' && request.method === 'GET') {
         const id = await readSession(env, request);
         if (!id) return fail(401, '未登录', origin);
-        const me = await env.DB.prepare('SELECT email FROM accounts WHERE id=?').bind(id).first();
-        if (!me || !env.OWNER_EMAIL || me.email !== env.OWNER_EMAIL.toLowerCase()) return fail(403, '仅总开发者可查看', origin);
+        const me = await env.DB.prepare('SELECT * FROM accounts WHERE id=?').bind(id).first();
+        if (!isAdminAccount(env, me)) return fail(403, '这个账号没有开发端权限', origin);
         const rows = await env.DB.prepare('SELECT * FROM accounts ORDER BY created_at DESC LIMIT 500').all();
         return json({ accounts: (rows.results || []).map(publicAccount) }, 200, origin);
       }

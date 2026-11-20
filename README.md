@@ -39,7 +39,17 @@ v2.0 是**另一套实现**，从零重写的浏览器版本：没有后端、�
 
 > 必须用 `https://` 或 `http://localhost` 打开。直接双击 html（`file://`）时浏览器不提供 WebCrypto，注册会被明确拒绝——我们宁可拒绝，也不用弱哈希凑合，否则换个环境就登不进自己的账号。
 
-开发端监管台在 [`/admin.html`](https://him-wang.github.io/CrushLens/admin.html)：第一个认领的账号成为**本机唯一**的总开发者。
+开发端监管台在 [`/admin.html`](https://him-wang.github.io/CrushLens/admin.html)：**只对白名单里的 GitHub 账号开放**，由 Worker 服务端校验（前端绕不过去）。没连云端时退回本机模式，第一个认领的账号成为**本机唯一**的总开发者。
+
+白名单写在 `worker/index.js` 的 `ADMIN_GITHUB_IDS`，用不可变的 GitHub 数字 id（login 能改名，id 不能）：
+
+| 账号 | GitHub id |
+| --- | --- |
+| [@Him-Wang](https://github.com/Him-Wang) | `106427909` |
+| [@1102-seven](https://github.com/1102-seven) | `355639050` |
+
+要加人不必改代码：给 Worker 加环境变量 `ADMIN_GITHUB_IDS`（逗号分隔，带不带 `gh_` 前缀都行）即可追加。`OWNER_EMAIL` 仍作兼容通道——邮箱命中的账号同样算 admin，避免老部署把自己锁在门外。
+
 
 ---
 

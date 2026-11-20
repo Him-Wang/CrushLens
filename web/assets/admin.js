@@ -13,7 +13,7 @@
   // 权限门页面也要跟随主题（含系统深色的实时切换），门上的主题下拉在这里就接上
   if (window.CLTheme) { CLTheme.init(); wireThemeSelects(); }
 
-  const state = { me: null, role: null, view: 'dash', owner: null, search: '' };
+  const state = { me: null, role: null, view: 'dash', owner: null, search: '', cloud: null, serverAdmin: false };
 
   const ACTIONS = {
     signup: ['注册账号', 'blue'], login: ['登录', 'gray'], logout: ['退出登录', 'gray'],
@@ -27,17 +27,79 @@
 
   boot();
 
+  /* 云端身份：admin 由 Worker 判定（白名单），前端只读结果。
+     返回 null 表示没配云端 / 没登录；否则 {account, admin}。 */
+  async function cloudIdentity() {
+    const Api = root.CLApi;
+    if (!Api || !Api.configured()) return null;
+    try {
+      const r = await Api.me();
+      return r && r.account ? { account: r.account, admin: !!r.admin } : null;
+    } catch (e) { return null; }
+  }
+
   async function boot() {
     state.owner = await S.ownerUid();
     const me = await S.current();
+
+    // 1) 云端已登录：以服务端白名单为准，这是唯一可信的判定
+    const cloud = await cloudIdentity();
+    if (cloud) {
+      state.cloud = cloud.account;
+      if (cloud.admin) {
+        // 白名单账号：把云端身份落到本地，并认领本机总开发者，
+        // 这样离线时控制台也能用（本机角色与云端白名单互不冲突）
+        const acc = await S.upsertCloudAccount(cloud.account);
+        if (!(await S.ownerUid())) {
+          try { await S.claimOwner(acc); } catch (e) { }
+        }
+        return await route(acc, true);
+      }
+      // 云端登录了但不在白名单：硬拒绝，不给申请入口
+      return gateDenied(cloud.account);
+    }
+
+    // 2) 没连云端：退回本机模式（离线也能用，但只认本机 IndexedDB）
     if (!me) return gateLogin();
     await route(me);
   }
 
-  async function route(me) {
+  /* 云端已登录但不在白名单——没有申请入口，只有退出。
+     前端拦一层是体验，真正的门在 Worker 的 isAdminAccount()。 */
+  function gateDenied(account) {
+    const who = esc(account.name || account.email || '这个账号');
+    showGate(`
+      <h2>没有开发端权限</h2>
+      <p>${who}，这个账号不在开发端白名单里。</p>
+      <div class="perm-card" style="margin:22px 0">
+        <div class="pi">${icon('shield', 18)}</div>
+        <div>
+          <div style="font-weight:600;font-size:13.5px">开发端只对指定账号开放</div>
+          <div class="tiny muted">由服务端校验 GitHub 账号，无法自助申请</div>
+        </div>
+      </div>
+      <button class="btn ghost block" id="deniedLogout">退出，回用户端</button>
+    `);
+    $('#deniedLogout').onclick = async () => {
+      try { await (root.CLApi && root.CLApi.logout && root.CLApi.logout()); } catch (e) { }
+      S.logout();
+      location.href = 'index.html';
+    };
+  }
+
+  async function route(me, serverAdmin) {
     state.me = me;
+    state.serverAdmin = !!serverAdmin;
     const role = await S.roleOf(me);
     state.role = role;
+
+    // 服务端白名单已是最高裁决：哪怕本机没认领过总开发者、也没有 grants，
+    // 只要 Worker 说是 admin 就必须放行，否则 1102-seven 这类账号会被本机
+    // 角色卡在「申请权限」页上，前后端判定不一致。
+    if (serverAdmin) {
+      state.role = { level: 'owner', permanent: true, expiresAt: null, viaServer: true };
+      return enterConsole();
+    }
 
     if (!state.owner) return gateSetup();
     if (role.level === 'owner') return enterConsole();
@@ -68,13 +130,20 @@
   }
 
   function gateLogin() {
+    const Api = root.CLApi;
+    const cloudOn = !!(Api && Api.configured());
     showGate(`
       <h2>开发端登录</h2>
       <p>这里只给开发者使用，普通用户请回用户端</p>
-      <div class="auth-tabs" style="margin:22px 0 20px">
-        <button class="active">登录</button>
-      </div>
-      <form id="gForm">
+
+      ${cloudOn ? `
+      <button class="btn gh block lg" id="gGhBtn" type="button" style="margin-top:22px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.6-4-1.6-.5-1.4-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17 4.9 18 5.2 18 5.2c.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.7-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3Z"/></svg>
+        使用 GitHub 登录
+      </button>
+      <div class="auth-or"><span>或用邮箱</span></div>` : ''}
+
+      <form id="gForm" ${cloudOn ? '' : 'style="margin-top:22px"'}>
         <div class="field"><label>邮箱</label>
           <input class="input" id="gEmail" type="email" placeholder="you@example.com" required></div>
         <div class="field"><label>密码</label>
@@ -82,12 +151,21 @@
         <div class="err-line" id="gErr"></div>
         <button class="btn primary block lg" type="submit">登录</button>
       </form>
+
       <div class="auth-note">
-        <b>还没有账号？</b>先到 <a href="index.html" class="link">用户端</a> 注册，再回来登录。
-        第一个登录并认领的账号将成为<b>总开发者</b>。
+        ${cloudOn
+          ? '<b>开发端只对指定账号开放。</b>用白名单里的 GitHub 账号登录即可进入；其他账号会被服务端拒绝，无法自助申请。'
+          : '<b>还没有账号？</b>先到 <a href="index.html" class="link">用户端</a> 注册，再回来登录。第一个登录并认领的账号将成为<b>总开发者</b>。'}
       </div>
       <a class="small muted" href="index.html" style="display:block;margin-top:16px;text-decoration:underline">← 返回用户端</a>
     `);
+    const ghBtn = $('#gGhBtn');
+    if (ghBtn) ghBtn.onclick = () => {
+      try {
+        sessionStorage.setItem('cl_want_admin', '1');
+        Api.githubLogin('admin');
+      } catch (e) { $('#gErr').textContent = e.message; }
+    };
     $('#gForm').onsubmit = async (e) => {
       e.preventDefault();
       $('#gErr').textContent = '';
@@ -186,7 +264,9 @@
     const [meBg, meFg] = avatarPair(S.pickColor(state.me.name));
     $('#meAvatar').style.background = meBg;
     $('#meAvatar').style.color = meFg;
-    $('#meRole').textContent = state.role.level === 'owner' ? '总开发者 · 本机唯一' : '授权开发者';
+    $('#meRole').textContent = state.serverAdmin
+      ? '白名单开发者 · 服务端校验'
+      : (state.role.level === 'owner' ? '总开发者 · 本机唯一' : '授权开发者');
     $('#logoutBtn').onclick = async () => {
       if (!(await confirmDlg({ title: '退出开发端', text: '只是退出登录，不会删除任何数据。', okText: '退出' }))) return;
       S.logout(); location.reload();
@@ -212,14 +292,18 @@
       </button>`).join('');
     $$('[data-nav]').forEach((b) => b.onclick = () => goto(b.dataset.nav));
 
-    const ownerTag = state.role.level === 'owner'
-      ? `<span class="badge rose" style="margin-left:auto">总开发者</span>`
-      : `<span class="badge amber" style="margin-left:auto">限时</span>`;
+    const ownerTag = state.serverAdmin
+      ? `<span class="badge rose" style="margin-left:auto">白名单</span>`
+      : (state.role.level === 'owner'
+        ? `<span class="badge rose" style="margin-left:auto">总开发者</span>`
+        : `<span class="badge amber" style="margin-left:auto">限时</span>`);
     $('#quick').innerHTML = `
       <div class="pitem" style="cursor:default">
         ${avatar(state.me.name, S.pickColor(state.me.name), 30)}
         <div class="pitem-body"><div class="pitem-name">${esc(state.me.name)}</div>
-        <div class="pitem-sub">${state.role.expiresAt ? '到期 ' + fmtDT(state.role.expiresAt) : '长期有效'}</div></div>
+        <div class="pitem-sub">${state.serverAdmin
+          ? '服务端白名单'
+          : (state.role.expiresAt ? '到期 ' + fmtDT(state.role.expiresAt) : '长期有效')}</div></div>
         ${ownerTag}
       </div>`;
   }
@@ -249,6 +333,11 @@
     const scope = `<div class="mask-hint" style="margin-bottom:12px">${icon('alert', 13)}
       <span>数据源：当前浏览器的本地数据库（IndexedDB）。这里只统计<b>在本机这个浏览器里</b>注册过的账号，
       不含其他设备上的用户。</span></div>`;
+    if (state.serverAdmin) {
+      // 白名单账号：权限来自 Worker，不依赖本机是否认领过总开发者
+      return scope + `<div class="perm-banner owner"><span class="pi">${icon('shield', 15)}</span>
+        <div><b>白名单开发者（服务端校验）。</b> 你的 GitHub 账号在开发端白名单里，权限由服务端判定，换浏览器同样有效。</div></div>`;
+    }
     if (state.role.level === 'owner') {
       return scope + `<div class="perm-banner owner"><span class="pi">${icon('shield', 15)}</span>
         <div><b>总开发者（本机唯一）。</b> 可查看本机的使用记录与聊天内容，可发放/撤销他人权限。</div></div>`;
