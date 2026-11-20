@@ -1213,29 +1213,19 @@ body.admin .badge.rose { background: var(--adm-soft); color: var(--adm-accent); 
 .demo-banner .db-dot { width: 8px; height: 8px; border-radius: 99px; background: var(--amber); }
 body.demo-mode .app, body.demo-mode #main { padding-top: 40px; }
 
-/* ---- 主题 FAB + 毛玻璃面板（T7.2） ---- */
+/* ---- 主题悬浮按钮：点击循环切换（T7.2） ---- */
 .theme-fab { position: fixed; right: 18px; bottom: 18px; z-index: 55;
-  width: 40px; height: 40px; border-radius: 99px; display: grid; place-items: center;
+  width: 46px; height: 46px; border-radius: 99px; display: grid; place-items: center;
   background: var(--surface); color: var(--ink-2); border: 1px solid var(--line);
   box-shadow: var(--sh); cursor: pointer; transition: transform .15s ease; }
-.theme-fab:hover { transform: translateY(-2px); }
-.theme-fab:focus-visible, .theme-panel button:focus-visible, .daynight:focus-visible {
+.theme-fab[hidden] { display: none; }
+.theme-fab:hover { transform: translateY(-2px) rotate(-8deg); }
+.theme-fab:focus-visible, .daynight:focus-visible {
   outline: 2px solid var(--rose); outline-offset: 2px; }
-.theme-panel { position: fixed; right: 18px; bottom: 66px; z-index: 56;
-  min-width: 190px; padding: 14px; border-radius: 16px;
-  background: color-mix(in srgb, var(--surface) 78%, transparent);
-  -webkit-backdrop-filter: blur(16px) saturate(160%); backdrop-filter: blur(16px) saturate(160%);
-  border: 1px solid var(--line); box-shadow: var(--sh-lg); }
-.theme-panel[hidden] { display: none; }
-.theme-panel .tp-title { font-size: 11px; color: var(--ink-3); margin-bottom: 10px; }
-.theme-panel .tp-dots { display: flex; gap: 9px; }
-.theme-panel .tp-dot { width: 24px; height: 24px; border-radius: 99px; cursor: pointer;
-  border: 2px solid transparent; transition: transform .12s ease; }
-.theme-panel .tp-dot:hover { transform: scale(1.12); }
-.theme-panel .tp-dot.active { border-color: var(--ink); }
-.tp-follow { margin-top: 12px; width: 100%; padding: 6px; font-size: 12px; cursor: pointer;
-  background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); border-radius: 9px; }
-.tp-follow.active { color: var(--rose); border-color: var(--rose); }
+/* 右下角小色点，指示当前主题 */
+.theme-fab .fab-dot { position: absolute; right: 4px; bottom: 4px;
+  width: 10px; height: 10px; border-radius: 99px; background: var(--rose);
+  border: 1.5px solid var(--surface); }
 
 /* ---- 昼夜滑块（替换原 select 槽位） ---- */
 .daynight { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
