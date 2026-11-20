@@ -14,7 +14,16 @@
   const KEY_REMEMBER = 'cl_model_remember';
   const KEY_ALLOW_RAW = 'cl_model_allow_raw';
   const API_KEY_KEY = 'cl_api_key';           // 专用键，备份导出排除
-  const BACKUP_EXCLUDE = [API_KEY_KEY, 'cl_session', (root.CLApi && root.CLApi.BASE_KEY) || 'cl_api_base'];
+  // 精确排除列表 + 前缀规则：绝不能把凭据写进可下载的备份。
+  // 注意真实会话键是 crushlens_session_v1（store.js 的 SESSION_KEY），
+  // 桥接 token 是 crushlens_bridge_token（app.js 的 bridgeTokenKey）；
+  // 旧实现误写成 'cl_session'，导致两者都被导出。
+  const BACKUP_EXCLUDE = [API_KEY_KEY, 'crushlens_session_v1', 'crushlens_bridge_token', (root.CLApi && root.CLApi.BASE_KEY) || 'cl_api_base'];
+  function isBackupExcluded(k) {
+    if (BACKUP_EXCLUDE.indexOf(k) >= 0) return true;
+    // 兜底：任何会话 / 令牌 / token / key 类键一律不外泄
+    return /session|token|^cl_api_key$|bridge/i.test(k);
+  }
 
   const PRESETS = [
     { id: 'deepseek', label: 'DeepSeek', base: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
@@ -66,7 +75,7 @@
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (BACKUP_EXCLUDE.indexOf(k) >= 0) continue;
+        if (isBackupExcluded(k)) continue;
         out[k] = localStorage.getItem(k);
       }
     } catch (e) { }

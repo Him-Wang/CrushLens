@@ -100,15 +100,23 @@
   function adminAccounts() { return req('/admin/accounts'); }
   function syncCounts(partnerCount) { return req('/account/sync-counts', { method: 'POST', body: { partner_count: partnerCount } }); }
 
-  // GitHub 登录：整页跳转到 Worker；回调后 Worker 302 回站点并带会话 Cookie，
-  // 前端 boot() 用 me() 感知登录态。绝不接触 access_token。
+  // GitHub 登录：整页跳转到 Worker；授权后 GitHub 带 code/state 回到站点 /?gh=1，
+  // 前端 boot() 再调用 githubCallback 把 code/state 转交服务端换取会话 Cookie。
+  // 前端全程不接触 access_token / client_secret。
   function githubLogin() {
     if (!configured()) throw new Error('还没有配置云端接口地址');
     location.href = base() + '/gh/login';
   }
 
+  // 把 GitHub 回调的 code/state 转交 Worker。服务端用它换 token（client_secret
+  // 只在 Worker secret）、校验 state、写入 cl_session Cookie；浏览器靠
+  // credentials:'include' 接收跨站 Cookie。返回后前端再调用 me() 感知登录态。
+  function githubCallback(code, state) {
+    return req('/gh/callback?code=' + encodeURIComponent(code) + '&state=' + encodeURIComponent(state));
+  }
+
   root.CLApi = {
     BASE_KEY, base, configured, setBase, stretch, req,
-    sendCode, register, login, resetPassword, logout, me, adminAccounts, syncCounts, githubLogin
+    sendCode, register, login, resetPassword, logout, me, adminAccounts, syncCounts, githubLogin, githubCallback
   };
 })(window);

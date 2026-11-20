@@ -166,7 +166,8 @@
       const m = modal({
         title: opts.title,
         sub: opts.sub,
-        html: `<p class="confirm-text">${opts.text || ''}</p>`,
+        // text 走 innerHTML，必须转义，避免导入的聊天里的名字/文本变成 HTML 执行
+        html: `<p class="confirm-text">${esc(opts.text || '')}</p>`,
         footer: `<button class="btn ghost" data-close>取消</button>
                  <button class="btn ${opts.danger ? 'danger' : 'primary'}" data-ok>${esc(opts.okText || '确定')}</button>`
       });

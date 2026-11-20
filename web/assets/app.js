@@ -119,11 +119,19 @@
   boot();
 
   async function boot() {
-    // GitHub 回调：Worker 通过 302 带回会话 Cookie，这里用 /me 感知登录态
+    // GitHub 回调：GitHub 授权后带 code/state 回到 /?gh=1。前端把这两个参数
+    // 转交 Worker 的 /gh/callback（GET，credentials:include 接收会话 Cookie），
+    // 服务端换 token 并下发 cl_session，之后再用 /me 拿到登录态。
     if (location.search.indexOf('gh=1') >= 0) {
+      const params = new URLSearchParams(location.search);
+      const code = params.get('code');
+      const state = params.get('state');
       history.replaceState({}, '', location.pathname);
       if (Api && Api.configured()) {
         try {
+          if (code && state && Api.githubCallback) {
+            await Api.githubCallback(code, state);
+          }
           const r = await Api.me();
           if (r && r.account) {
             const acc = await S.upsertCloudAccount(r.account);
