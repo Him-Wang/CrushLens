@@ -101,12 +101,13 @@
   function adminAccounts() { return req('/admin/accounts'); }
   function syncCounts(partnerCount) { return req('/account/sync-counts', { method: 'POST', body: { partner_count: partnerCount } }); }
 
-  // 匿名使用上报（用户 opt-in）：只发元数据，绝不含聊天内容/邮箱/昵称。
+  // 匿名使用上报（默认开启，用户可随时关闭）：只发元数据，绝不含聊天内容/邮箱/昵称。
   // 失败完全静默，绝不影响用户正常使用。
-  const TELEMETRY_KEY = 'cl_telemetry_optin';
+  // opt-out 语义：只有用户主动关闭才写 '0'；没设置过一律视为开启。
+  const TELEMETRY_KEY = 'cl_telemetry_optout';
   const APP_VERSION = 'v2.1';
-  function telemetryEnabled() { try { return localStorage.getItem(TELEMETRY_KEY) === '1'; } catch (e) { return false; } }
-  function setTelemetry(on) { try { on ? localStorage.setItem(TELEMETRY_KEY, '1') : localStorage.removeItem(TELEMETRY_KEY); } catch (e) { } }
+  function telemetryEnabled() { try { return localStorage.getItem(TELEMETRY_KEY) !== '0'; } catch (e) { return true; } }
+  function setTelemetry(on) { try { on ? localStorage.removeItem(TELEMETRY_KEY) : localStorage.setItem(TELEMETRY_KEY, '0'); } catch (e) { } }
   function reportUsage(kind, extra) {
     if (!telemetryEnabled() || !configured()) return Promise.resolve(false);
     const b = Object.assign({ kind, appVersion: APP_VERSION }, extra || {});

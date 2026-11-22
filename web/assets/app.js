@@ -2561,7 +2561,7 @@
         <p class="small muted mt6">帮助开发者了解有多少人在用、用了哪些功能。<b>只上报匿名元数据</b>（注册/登录/导入次数、平台类型、App 版本、时间），<b>绝不包含聊天内容、邮箱、昵称</b>。你可以随时关闭。</p>
         <label class="row mt12" style="gap:8px;font-size:12.5px">
           <input type="checkbox" id="telemetryOpt" ${Api && Api.telemetryEnabled && Api.telemetryEnabled() ? 'checked' : ''}>
-          参与匿名统计（默认关闭）
+          参与匿名统计（默认开启，可随时关闭）
         </label>
       </div>
 

@@ -15,6 +15,11 @@ release/
 !web/assistant/心动镜连接助手-v2.zip
 !web/tools/wechat-reader/心动镜微信记录读取器-v1.0.0.zip
 
+# Local tooling installs (wrangler + npm cache), never commit
+worker/.wrangler-local/
+worker/.npm-cache-wrangler/
+worker/.xdg-config/
+
 # IDE / OS noise
 .vs/
 .vscode/
