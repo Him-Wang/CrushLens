@@ -222,5 +222,51 @@ async function call(env, path, { method = 'GET', body, origin = 'http://localhos
   ok(d3.admin === true, 'OWNER_EMAIL 邮箱账号仍是 admin（向后兼容）');
 }
 
+// --- 7. /register 使用用户填写的昵称，且 publicAccount 含 github_id 字段 ---
+{
+  const env = { DB: makeD1(), PEPPER: 'pepper', BREVO_KEY: 'fake-key', SITE_ORIGIN: 'http://localhost:5173' };
+  const origFetch = globalThis.fetch;
+  let mailedCode = null;
+  globalThis.fetch = async (url, init) => {
+    const m = JSON.parse(init.body).htmlContent.match(/letter-spacing:8px[^>]*>(\d{6})</);
+    if (m) mailedCode = m[1];
+    return new Response('{}', { status: 200 });
+  };
+  try {
+    await call(env, '/email/code', { method: 'POST', body: { email: 'nick@example.com' } });
+    const r = await call(env, '/register', { method: 'POST', body: {
+      email: 'nick@example.com', code: mailedCode,
+      salt: 'a'.repeat(32), stretched: 'b'.repeat(64), name: '小镜'
+    } });
+    ok(r.status === 200, 'register with valid code -> 200');
+    ok(r.data && r.data.account && r.data.account.name === '小镜', '/register 使用提交的昵称');
+    ok(r.data && r.data.account && 'github_id' in r.data.account, 'publicAccount 含 github_id 字段');
+  } finally { globalThis.fetch = origFetch; }
+}
+
+// --- 8. 发信失败 -> 非 2xx 且不落库（不再伪装成功） ---
+{
+  const env = { DB: makeD1(), PEPPER: 'pepper', BREVO_KEY: 'fake-key', SITE_ORIGIN: 'http://localhost:5173' };
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('{}', { status: 400 });
+  try {
+    const r = await call(env, '/email/code', { method: 'POST', body: { email: 'mailfail@example.com' } });
+    ok(r.status !== 200, 'mailer failure -> non-200 (not silent success)');
+    ok(env.DB._codes.size === 0, 'no code stored when mail failed');
+  } finally { globalThis.fetch = origFetch; }
+}
+
+// --- 9. SITE_ORIGIN 配置的来源被 CORS 放行（自托管可用） ---
+{
+  const env = { DB: makeD1(), PEPPER: 'p', BREVO_KEY: 'k', SITE_ORIGIN: 'https://custom.example.com/app' };
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('{}', { status: 200 });
+  try {
+    const r = await call(env, '/email/code', { method: 'POST', origin: 'https://custom.example.com', body: { email: 'x@y.com' } });
+    ok(r.status === 200, 'SITE_ORIGIN 来源被放行');
+    ok(r.headers.get('Access-Control-Allow-Origin') === 'https://custom.example.com', 'ACAO reflects custom origin');
+  } finally { globalThis.fetch = origFetch; }
+}
+
 console.log(`\n结果：${pass} 通过 / ${fail} 失败`);
 process.exit(fail ? 1 : 0);

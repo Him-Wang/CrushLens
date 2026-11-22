@@ -14,9 +14,13 @@ const COOKIE = 'cl_session';
 /* ---------------- CORS / origin allowlist ---------------- */
 // Hard fact: GitHub device/oauth endpoints are 404 cross-origin, so this
 // relay is mandatory. We accept only the site and localhost dev origins.
+// 自托管时放行 SITE_ORIGIN 配置的来源（取「协议+主机」部分，去掉路径）。
+// 每个请求按 env 重算，避免多租户/测试间串味。
+let EXTRA_ORIGIN = '';
 function allowedOrigin(origin) {
   if (!origin) return false;
   if (origin === 'https://him-wang.github.io') return true;
+  if (EXTRA_ORIGIN && origin === EXTRA_ORIGIN) return true;
   // http://localhost:* and http://127.0.0.1:* on any port
   return /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
 }
@@ -162,6 +166,7 @@ function isAdminAccount(env, acc) {
 function publicAccount(a) {
   return {
     id: a.id, email: a.email, name: a.name, provider: a.provider,
+    github_id: a.github_id || null,
     avatar: a.avatar || null, created_at: a.created_at, last_login: a.last_login,
     login_count: a.login_count, partner_count: a.partner_count
   };
@@ -189,6 +194,10 @@ async function sendCodeMail(env, email, code) {
  * ============================================================ */
 export default {
   async fetch(request, env) {
+    EXTRA_ORIGIN = '';
+    if (env.SITE_ORIGIN) {
+      try { EXTRA_ORIGIN = new URL(env.SITE_ORIGIN).origin; } catch (e) { /* 配置非法则忽略 */ }
+    }
     const origin = request.headers.get('Origin') || '';
     const url = new URL(request.url);
     const path = url.pathname;
@@ -296,11 +305,13 @@ export default {
           return fail(503, '邮件服务未配置，邮箱注册/找回暂不可用；请配置 BREVO_KEY 或改用 GitHub 登录', origin);
         }
         const code = random6Digit();
+        // 先发信、成功后才落库：发信失败时不留无效的验证码行，也不让限流额度被白耗。
+        // 不回传验证码本身，也不回传邮件服务的内部细节，避免泄露可用于重置密码的凭据。
+        const mail = await sendCodeMail(env, email, code);
+        if (!mail.sent) return fail(502, '验证码邮件发送失败，请稍后重试或改用 GitHub 登录', origin);
         const now = Date.now();
         await env.DB.prepare('INSERT INTO codes(email,code_hash,expires_at,tries,created_at) VALUES(?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET code_hash=excluded.code_hash, expires_at=excluded.expires_at, tries=0, created_at=excluded.created_at')
           .bind(email, await hmacHex(env.PEPPER, code + '|' + email), now + CODE_TTL, 0, now).run();
-        await sendCodeMail(env, email, code);
-        // Only a boolean ack — no code, no reason string with mail internals.
         return json({ ok: true, sent: true }, 200, origin);
       }
 
@@ -320,6 +331,8 @@ export default {
         const code = String(b.code || '').trim();
         const salt = String(b.salt || '');
         const stretched = String(b.stretched || '');
+        // 昵称由用户自填；做长度截断与空白压缩，非法/过长的输入退回邮箱前缀。
+        const name = String(b.name || '').replace(/\s+/g, ' ').trim().slice(0, 40);
         if (!validEmail(email) || !/^[0-9a-f]{64}$/i.test(stretched) || !/^[0-9a-f]{32}$/i.test(salt)) {
           return fail(400, '参数不合法', origin);
         }
@@ -336,7 +349,7 @@ export default {
         const id = 'a_' + randHex(12);
         const now = Date.now();
         await env.DB.prepare('INSERT INTO accounts(id,email,name,password_hash,salt,provider,created_at,last_login,login_count,partner_count) VALUES(?,?,?,?,?,?,?,?,?,0)')
-          .bind(id, email, email.split('@')[0], passwordHash, salt, 'password', now, now, 1).run();
+          .bind(id, email, name || email.split('@')[0], passwordHash, salt, 'password', now, now, 1).run();
         await env.DB.prepare('DELETE FROM codes WHERE email=?').bind(email).run();
         const acc = await env.DB.prepare('SELECT * FROM accounts WHERE id=?').bind(id).first();
         return await withSession(env, origin, id, { ok: true, account: publicAccount(acc) }, 200);

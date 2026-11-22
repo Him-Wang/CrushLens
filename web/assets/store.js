@@ -782,6 +782,7 @@
       acc.lastLogin = now;
       acc.loginCount = (acc.loginCount || 1) + 1;
       acc.name = profile.name || acc.name;
+      acc.githubId = profile.github_id || acc.githubId || null;
       acc.avatar = profile.avatar || acc.avatar;
       acc.cloud = true;
       await put('accounts', acc);

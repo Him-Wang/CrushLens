@@ -1,6 +1,8 @@
 # GitHub 登录 / 云端账号部署指南（零成本）
 
-当前状态：**后端从未部署**，所以登录页的「使用 GitHub 登录」点了没反应是正常的——仓库里 `worker/wrangler.toml` 还是占位符，密钥也都没配。按下面 6 步做完，GitHub 登录、邮箱验证码、云端账号就都能用了。全程零成本（Cloudflare / GitHub OAuth / Brevo 都用免费额度）。
+当前状态：前端已内置官方默认接口地址（`web/assets/api.js` 的 `DEFAULT_BASE = https://crushlens-api.crushlens.workers.dev`），官方站点开箱即可用 GitHub 登录、邮箱验证码和云端账号。本指南用于**自托管 / 换域名**时从零部署你自己的 Worker。全程零成本（Cloudflare / GitHub OAuth / Brevo 都用免费额度）。
+
+> 注意：Worker 的 CORS 白名单除官方站点 `https://him-wang.github.io` 和本机 `localhost/127.0.0.1` 外，还会自动放行 `wrangler.toml` 中 `SITE_ORIGIN` 配置的来源。自托管到别的域名时，务必把 `SITE_ORIGIN` 改成你的站点地址，并把 GitHub OAuth App 的 callback URL 同步改为 `<SITE_ORIGIN>/?gh=1`，两边一致才能登录。
 
 ---
 
@@ -93,7 +95,7 @@ wrangler deploy
 2. 点「先不登录，本地用」进入。
 3. 设置 → 模型与云端 → **云端接口地址（Worker）** 填第 3.4 步的地址（`https://crushlens-api.<你的子域>.workers.dev`，结尾不要带 `/`），保存。
 
-这个地址只存在你浏览器的 localStorage（`cl_api_base`），不入库、不影响其他访客。**每个想用云端登录的浏览器都要各填一次**——这是当前设计（零后端配置下沉到用户侧）。如果想让所有访客开箱即用，需要把这个默认值写进 `web/assets/api.js` 的 `base()`，那属于产品决策，告诉我我再改。
+官方站点已内置上述默认地址，正常无需手填；只有当你要连到**自托管的 Worker** 时才需要在这里覆盖。这个地址只存在你浏览器的 localStorage（`cl_api_base`），不入库、不影响其他访客，每个浏览器各自保存一份。需要恢复官方默认地址时，把该 localStorage 项删掉即可（或点设置里的「恢复默认」）。
 
 ---
 

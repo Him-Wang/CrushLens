@@ -176,6 +176,9 @@
     $('#authTitle').textContent = signup ? '创建你的账号' : '欢迎回来';
     $('#authSub').textContent = signup ? '注册需要邮箱验证码，聊天记录仍然只在本机' : '登录后继续追踪你的对话曲线';
     $('#authSubmit').textContent = signup ? '注册并进入' : '登录';
+    // 「忘记密码」只在云端登录态可用（本地/演示账号没有验证码找回）
+    const forgot = $('#forgotLink');
+    if (forgot) forgot.hidden = signup || !(Api && Api.configured());
     $('#fPass').autocomplete = signup ? 'new-password' : 'current-password';
     $('#fPass2').value = '';
     setAuthErr('');
@@ -211,7 +214,7 @@
     applyAuthMode(mode);
 
     $$('.auth-tabs button').forEach((b) => {
-      b.onclick = () => { mode = b.dataset.tab; applyAuthMode(mode); };
+      b.onclick = () => { resetMode = false; mode = b.dataset.tab; applyAuthMode(mode); };
     });
     ['#fEmail', '#fName', '#fPass'].forEach((sel) => {
       $(sel).addEventListener('input', () => {
@@ -243,6 +246,22 @@
       finally { btn.disabled = false; btn.textContent = old; }
     };
 
+    // 忘记密码：邮箱验证码 + 新密码，走云端 /password/reset
+    // 复用注册页的验证码区与确认密码区，提交时切到 reset 模式。
+    let resetMode = false;
+    const forgot = $('#forgotLink');
+    if (forgot) forgot.onclick = () => {
+      resetMode = true;
+      applyAuthMode('signup');                    // 显示邮箱/验证码/确认密码字段
+      $('#nameField').hidden = true;              // 找回不需要昵称
+      $('#authTitle').textContent = '重置密码';
+      $('#authSub').textContent = '用邮箱验证码设置新密码';
+      $('#authSubmit').textContent = '重置并登录';
+      $('#authSubmit').disabled = false;
+      setAuthErr('');
+      $('#fEmail').focus();
+    };
+
     // 先看看效果（T3）：进入纯内存演示，不碰 IndexedDB
     $('#demoBtn').onclick = () => enterDemoMode();
 
@@ -267,18 +286,26 @@
 
     $('#authForm').onsubmit = async (e) => {
       e.preventDefault();
-      if (mode === 'signup' && !validateConfirm()) return;
+      if ((mode === 'signup' || resetMode) && !validateConfirm()) return;
       const email = $('#fEmail').value.trim();
       const pass = $('#fPass').value;
       const name = $('#fName').value.trim();
       const code = $('#fCode').value.trim();
       draft.email = email; draft.name = name; draft.pass = pass;
-      if (mode === 'signup' && pass.length < 8) { setAuthErr('密码至少 8 位'); return; }
+      if ((mode === 'signup' || resetMode) && pass.length < 8) { setAuthErr('密码至少 8 位'); return; }
+      if (resetMode && !code) { setAuthErr('请填写邮箱验证码'); return; }
       $('#authErr').textContent = '';
       $('#authSubmit').disabled = true;
       try {
         let acc, profile = null;
-        if (Api && Api.configured()) {
+        if (resetMode) {
+          // 忘记密码：先重置，重置成功后 Endpoint 不建会话，需再登录一次拿到 profile
+          if (!Api || !Api.configured()) { setAuthErr('还没配置云端接口地址'); return; }
+          await Api.resetPassword(email, code, pass);
+          const r = await Api.login(email, pass);
+          profile = r.account;
+          acc = await S.current() || await S.upsertCloudAccount(profile);
+        } else if (Api && Api.configured()) {
           // 云端注册/登录：拉伸在浏览器，Worker 只做一次 HMAC
           const r = mode === 'login' ? await Api.login(email, pass) : await Api.register(email, code, pass, name);
           profile = r.account;
@@ -287,9 +314,10 @@
           // 未配置云端时，注册/登录退回本机 IndexedDB（零成本、离线可用）
           acc = mode === 'login' ? await S.login(email, pass) : await S.signup(email, pass, name);
         }
-        if (mode === 'signup' && Api && Api.configured()) await afterCloudLogin(acc, profile);
+        if ((mode === 'signup' || resetMode) && Api && Api.configured()) await afterCloudLogin(acc, profile);
         else await enter(acc);
-        toast(mode === 'login' ? '欢迎回来' : '账号已创建');
+        toast(resetMode ? '密码已重置，欢迎回来' : (mode === 'login' ? '欢迎回来' : '账号已创建'));
+        resetMode = false;
       } catch (err) {
         setAuthErr(err.message || '出错了，再试一次');
       } finally {

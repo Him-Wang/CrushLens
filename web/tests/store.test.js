@@ -160,6 +160,13 @@ function loadStore(subtleOn) {
   ok(leak.length === 0, '任何字段值里也不含凭据片段' + (leak.length ? ('：泄漏于 ' + leak.join(',')) : ''));
   ok(r0.email === 'user@test.com' && typeof r0.partnerCount === 'number', '业务字段正常（email/partnerCount）');
 
+  /* ---------------- 2b. upsertCloudAccount 刷新 githubId ---------------- */
+  section('2b. 云端账号 upsert 刷新 githubId');
+  const gacc = await S2.upsertCloudAccount({ id: 'gh_1', email: 'gh@example.com', name: '阿镜', provider: 'github', github_id: '12345', partner_count: 2 });
+  ok(gacc.githubId === '12345', '首次 upsert 记录 githubId');
+  const gacc2 = await S2.upsertCloudAccount({ id: 'gh_1', email: 'gh@example.com', name: '阿镜', provider: 'github', github_id: '99999', partner_count: 3 });
+  ok(gacc2.githubId === '99999', '再次 upsert 刷新 githubId（不是死代码）');
+
   /* ---------------- 3. 同名归并查询 ---------------- */
   section('3. findPartnerByName（导入前查同名对象）');
   const p1 = await S2.createPartner(acc.id, { name: '林晚', platform: 'wechat' });

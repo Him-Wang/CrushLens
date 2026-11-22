@@ -779,7 +779,8 @@
   async function viewCloudAccounts() {
     const Api = root.CLApi;
     const headHtml = `<div class="page-head"><div><h1>云端账号</h1>
-      <p>来自云端 Worker 的账号元数据：邮箱、昵称、登录次数、追踪对象计数。不含任何聊天内容。</p></div>
+      <p>来自云端 Worker 的账号元数据：邮箱、昵称、登录次数、追踪对象计数。不含任何聊天内容。</p>
+      <p class="tiny muted">查看权限由云端 Worker 判定：需用<b>开发端白名单</b>里的 GitHub 账号登录（<code>OWNER_EMAIL</code> 邮箱账号兼容保留）；本机「总开发者」身份仅控制本地监管台，不等于云端权限。</p></div>
       <div class="spacer"></div><div class="row"><button class="btn ghost sm" id="caRefresh">${icon('refresh', 14)} 刷新</button></div></div>`;
     if (!Api || !Api.configured()) {
       $('#main').innerHTML = headHtml + `<div class="card">${empty('alert', '还没配置云端接口地址', '请在用户端「设置 → 云端账号」填入 Worker 地址后刷新。', '')}</div>`;
@@ -815,7 +816,10 @@
       $('#caRefresh').onclick = () => viewCloudAccounts();
       await S.log(state.me.id, 'cloud_accounts_view', '', { count: rows.length });
     } catch (e) {
-      $('#main').innerHTML = headHtml + `<div class="card">${empty('alert', '读取失败', e.message || '请确认是总开发者且云端地址正确。', '<button class="btn ghost sm" id="caRefresh">重试</button>')}</div>`;
+      let hint = e.message || '请确认云端地址正确。';
+      if (e.status === 401) hint = '云端会话未登录，请先在用户端用邮箱或 GitHub 登录云端账号。';
+      else if (e.status === 403) hint = '当前云端账号不在开发端白名单里。本机「总开发者」身份不授予云端查看权限，请用白名单中的 GitHub 账号（或 OWNER_EMAIL 邮箱账号）登录后重试。';
+      $('#main').innerHTML = headHtml + `<div class="card">${empty('alert', '读取失败', hint, '<button class="btn ghost sm" id="caRefresh">重试</button>')}</div>`;
       const rr = $('#caRefresh'); if (rr) rr.onclick = () => viewCloudAccounts();
     }
   }
