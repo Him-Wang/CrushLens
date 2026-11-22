@@ -101,6 +101,24 @@
   function adminAccounts() { return req('/admin/accounts'); }
   function syncCounts(partnerCount) { return req('/account/sync-counts', { method: 'POST', body: { partner_count: partnerCount } }); }
 
+  // 匿名使用上报（用户 opt-in）：只发元数据，绝不含聊天内容/邮箱/昵称。
+  // 失败完全静默，绝不影响用户正常使用。
+  const TELEMETRY_KEY = 'cl_telemetry_optin';
+  const APP_VERSION = 'v2.1';
+  function telemetryEnabled() { try { return localStorage.getItem(TELEMETRY_KEY) === '1'; } catch (e) { return false; } }
+  function setTelemetry(on) { try { on ? localStorage.setItem(TELEMETRY_KEY, '1') : localStorage.removeItem(TELEMETRY_KEY); } catch (e) { } }
+  function reportUsage(kind, extra) {
+    if (!telemetryEnabled() || !configured()) return Promise.resolve(false);
+    const b = Object.assign({ kind, appVersion: APP_VERSION }, extra || {});
+    return req('/usage/report', { method: 'POST', body: b })
+      .then(() => true)
+      .catch(() => false);
+  }
+  // 开发端：从服务端读真实统计（白名单账号），可选 mirror=1 触发 GitHub 镜像。
+  function adminStats(days, mirror) {
+    return req('/admin/stats' + '?days=' + encodeURIComponent(days || 14) + (mirror ? '&mirror=1' : ''));
+  }
+
   // GitHub 登录：整页跳转到 Worker；授权后 GitHub 带 code/state 回到站点 /?gh=1，
   // 前端 boot() 再调用 githubCallback 把 code/state 转交服务端换取会话 Cookie。
   // 前端全程不接触 access_token / client_secret。
@@ -119,6 +137,7 @@
 
   root.CLApi = {
     BASE_KEY, DEFAULT_BASE, base, configured, setBase, stretch, req,
-    sendCode, register, login, resetPassword, logout, me, adminAccounts, syncCounts, githubLogin, githubCallback
+    sendCode, register, login, resetPassword, logout, me, adminAccounts, syncCounts, githubLogin, githubCallback,
+    TELEMETRY_KEY, telemetryEnabled, setTelemetry, reportUsage, adminStats
   };
 })(window);

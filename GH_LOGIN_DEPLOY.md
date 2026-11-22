@@ -67,6 +67,9 @@ database_id = "这里填刚才的 database_id"
 wrangler d1 execute crushlens --remote --file=schema.sql
 ```
 
+> 已部署的库要升级匿名统计时，重跑这条命令即可：`schema.sql` 里都是
+> `CREATE TABLE IF NOT EXISTS`，不会破坏现有账号数据，只会新增 `usage_events` 表。
+
 ### 3.3 配置密钥（5 个 secret + 1 个变量）
 
 ```bash
@@ -78,6 +81,16 @@ wrangler secret put OWNER_EMAIL       # 你的邮箱，/admin/accounts 管理员
 ```
 
 `SITE_ORIGIN` 是普通变量，`wrangler.toml` 里已写死 `https://him-wang.github.io/CrushLens`（**不带结尾斜杠**），不用动。`MAIL_FROM` 里 `no-reply@crushlens.workers.dev` 若未验证，改成第 2 步验证过的发件邮箱。
+
+**可选：把匿名统计镜像到 GitHub 仓库**（让"仓库里能看到真实数据"）。需要额外的 1 个 secret + 1 个变量：
+
+```bash
+wrangler secret put GH_MIRROR_TOKEN   # 一个有该仓库 contents:write 权限的 PAT，只存在服务端
+wrangler variable put GH_MIRROR_REPO owner/repo   # 接收 cl-stats.json 的仓库
+# 可选：wrangler variable put GH_MIRROR_BRANCH main
+```
+
+配好后在监管台「使用分析 → 镜像到 GitHub」点击，即可把汇总快照写入仓库的 `cl-stats.json`。**token 永远不下发到浏览器**，客户端无法接触。不配置这两项时，统计照常存 D1、镜像按钮会提示未配置，不影响任何功能。
 
 ### 3.4 部署
 

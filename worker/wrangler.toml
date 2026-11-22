@@ -4,8 +4,11 @@ compatibility_date = "2026-01-01"
 # No custom domain on purpose: the free *.workers.dev subdomain is used.
 # Set these secrets with `wrangler secret put <NAME>` (never commit values):
 #   GH_CLIENT_ID, GH_CLIENT_SECRET, BREVO_KEY, PEPPER, OWNER_EMAIL
-# Set this var (not a secret) with `wrangler variable put`:
+#   GH_MIRROR_TOKEN   (可选) 用于把匿名统计镜像到 GitHub 仓库的 PAT，仅服务端持有
+# Set these vars (not secrets) with `wrangler variable put`:
 #   SITE_ORIGIN = https://him-wang.github.io/CrushLens
+#   GH_MIRROR_REPO = owner/repo   (可选) 接收 cl-stats.json 的仓库
+#   GH_MIRROR_BRANCH = main       (可选，默认 main)
 
 [[d1_databases]]
 binding = "DB"

@@ -162,6 +162,64 @@ function isAdminAccount(env, acc) {
   return !!(owner && acc.email && String(acc.email).trim().toLowerCase() === owner);
 }
 
+/* ---------------- anonymous usage telemetry ----------------
+   只记录服务端可见的事件（注册/登录/重置）与浏览器 opt-in 上报的
+   匿名事件。绝不写 email / name / 账号 id / 聊天内容。 */
+const USAGE_KINDS = new Set(['signup', 'login', 'password_reset', 'import', 'app_open']);
+function bucketMsgs(n) {
+  const x = Math.max(0, Math.floor(Number(n) || 0));
+  if (x <= 0) return 0;
+  if (x < 10) return 5;
+  if (x < 50) return 25;
+  if (x < 100) return 75;
+  if (x < 500) return 250;
+  if (x < 1000) return 750;
+  return 1000;
+}
+async function recordUsage(env, kind, opts) {
+  if (!USAGE_KINDS.has(kind)) return;
+  try {
+    const o = opts || {};
+    await env.DB.prepare('INSERT INTO usage_events(kind,platform,msg_bucket,app_version,created_at) VALUES(?,?,?,?,?)')
+      .bind(kind, o.platform || null, o.msgBucket == null ? null : bucketMsgs(o.msgBucket), String(o.appVersion || '').slice(0, 32) || null, Date.now()).run();
+  } catch (e) { /* 统计失败绝不影响主流程 */ }
+}
+
+/* ---------------- GitHub 透明镜像（token 只在服务端） ----------------
+   把汇总数据写到一个仓库的 stats.json，让「仓库里能看到真实数据」。
+   token 作为 Worker secret（GH_MIRROR_TOKEN）保存，绝不下发浏览器；
+   没配 token/repo 时静默跳过，不影响任何主流程。 */
+const MIRROR_PATH = 'cl-stats.json';
+async function mirrorStats(env, stats) {
+  const token = env.GH_MIRROR_TOKEN;
+  const repo = String(env.GH_MIRROR_REPO || '').trim();
+  if (!token || !/^[^/\s]+\/[^/\s]+$/.test(repo)) return { mirrored: false, reason: 'not_configured' };
+  try {
+    const api = 'https://api.github.com/repos/' + repo + '/contents/' + MIRROR_PATH;
+    const headers = {
+      'Authorization': 'Bearer ' + token, 'User-Agent': 'CrushLens', 'Accept': 'application/vnd.github+json'
+    };
+    // 先读现有 sha（PUT 更新必须有 sha）
+    let sha = null;
+    const cur = await fetch(api, { headers });
+    if (cur.ok) { const j = await cur.json(); sha = j.sha || null; }
+    const content = JSON.stringify({ updated_at: new Date().toISOString(), stats }, null, 2);
+    // UTF-8 安全的 base64（不依赖已弃用的 unescape）
+    const bytes = new TextEncoder().encode(content);
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    const body = {
+      message: 'chore: update CrushLens anonymous stats',
+      content: btoa(binary),
+      branch: env.GH_MIRROR_BRANCH || 'main'
+    };
+    if (sha) body.sha = sha;
+    const put = await fetch(api, { method: 'PUT', headers, body: JSON.stringify(body) });
+    if (!put.ok) return { mirrored: false, reason: 'github_' + put.status };
+    return { mirrored: true };
+  } catch (e) { return { mirrored: false, reason: 'error' }; }
+}
+
 /* ---------------- account whitelist (NO chat content) ---------------- */
 function publicAccount(a) {
   return {
@@ -271,9 +329,11 @@ export default {
           await env.DB.prepare('INSERT INTO accounts(id,email,name,provider,github_id,avatar,created_at,last_login,login_count,partner_count) VALUES(?,?,?,?,?,?,?,?,?,0)')
             .bind(id, g.email || (g.login + '@users.noreply.github.com'), g.name || g.login, 'github', ghId, g.avatar_url, now, now, 1).run();
           acc = await env.DB.prepare('SELECT * FROM accounts WHERE id=?').bind(id).first();
+          await recordUsage(env, 'signup');
         } else {
           await env.DB.prepare('UPDATE accounts SET last_login=?, login_count=login_count+1, name=?, avatar=? WHERE id=?')
             .bind(now, g.name || g.login, g.avatar_url, acc.id).run();
+          await recordUsage(env, 'login');
         }
         // Clear the oauth state cookie and set the session cookie together.
         const token = await issueSession(env, acc.id);
@@ -351,6 +411,7 @@ export default {
         await env.DB.prepare('INSERT INTO accounts(id,email,name,password_hash,salt,provider,created_at,last_login,login_count,partner_count) VALUES(?,?,?,?,?,?,?,?,?,0)')
           .bind(id, email, name || email.split('@')[0], passwordHash, salt, 'password', now, now, 1).run();
         await env.DB.prepare('DELETE FROM codes WHERE email=?').bind(email).run();
+        await recordUsage(env, 'signup');
         const acc = await env.DB.prepare('SELECT * FROM accounts WHERE id=?').bind(id).first();
         return await withSession(env, origin, id, { ok: true, account: publicAccount(acc) }, 200);
       }
@@ -385,6 +446,7 @@ export default {
         await env.DB.prepare('UPDATE accounts SET last_login=?, login_count=login_count+1 WHERE id=?').bind(Date.now(), acc.id).run();
         await env.DB.prepare('DELETE FROM rate WHERE bucket=?').bind(lockKey).run();
         acc.login_count = (acc.login_count || 0) + 1;
+        await recordUsage(env, 'login');
         return await withSession(env, origin, acc.id, { ok: true, account: publicAccount(acc) }, 200);
       }
 
@@ -407,6 +469,7 @@ export default {
         const passwordHash = await hmacHex(env.PEPPER, stretched + '|' + salt);
         await env.DB.prepare('UPDATE accounts SET password_hash=?, salt=? WHERE id=?').bind(passwordHash, salt, acc.id).run();
         await env.DB.prepare('DELETE FROM codes WHERE email=?').bind(email).run();
+        await recordUsage(env, 'password_reset');
         return json({ ok: true }, 200, origin);
       }
 
@@ -437,6 +500,66 @@ export default {
         if (!isAdminAccount(env, me)) return fail(403, '这个账号没有开发端权限', origin);
         const rows = await env.DB.prepare('SELECT * FROM accounts ORDER BY created_at DESC LIMIT 500').all();
         return json({ accounts: (rows.results || []).map(publicAccount) }, 200, origin);
+      }
+
+      /* ---------- 匿名上报（浏览器 opt-in，仅元数据，无聊天内容/身份） ---------- */
+      if (path === '/usage/report' && request.method === 'POST') {
+        const b = await body(request);
+        const kind = String(b.kind || '');
+        if (!USAGE_KINDS.has(kind)) return fail(400, '未知事件类型', origin);
+        // 只允许浏览器侧 opt-in 的这几类；服务端事件不能由客户端伪造。
+        if (!['import', 'app_open'].includes(kind)) return fail(400, '该事件只能由服务端记录', origin);
+        // 轻量限流：同一 IP 每 10 分钟最多 30 条，防止统计被脚本灌水。
+        const rl = await rateHit(env, 'usage:' + clientIp(request), 30, 10 * 60 * 1000);
+        if (!rl.ok) return fail(429, '上报太频繁，稍后再试', origin);
+        const platform = kind === 'import' ? String(b.platform || '').slice(0, 24) || null : null;
+        await recordUsage(env, kind, {
+          platform,
+          msgBucket: b.msgBucket,
+          appVersion: b.appVersion
+        });
+        return json({ ok: true }, 200, origin);
+      }
+
+      /* ---------- admin: 真实使用统计（从服务端 D1 读，非本机 IndexedDB） ---------- */
+      if (path === '/admin/stats' && request.method === 'GET') {
+        const id = await readSession(env, request);
+        if (!id) return fail(401, '未登录', origin);
+        const me = await env.DB.prepare('SELECT * FROM accounts WHERE id=?').bind(id).first();
+        if (!isAdminAccount(env, me)) return fail(403, '这个账号没有开发端权限', origin);
+        const days = Math.max(1, Math.min(90, Math.floor(Number(url.searchParams.get('days')) || 14)));
+        const since = Date.now() - days * 86400_000;
+        const [accAgg, evRows, kindRows, platformRows, bucketRows] = await Promise.all([
+          env.DB.prepare('SELECT COUNT(*) AS users, SUM(login_count) AS logins, SUM(partner_count) AS partners, MIN(created_at) AS first_at FROM accounts').first(),
+          env.DB.prepare('SELECT kind, created_at FROM usage_events WHERE created_at>=? ORDER BY created_at DESC LIMIT 5000').bind(since).all(),
+          env.DB.prepare('SELECT kind, COUNT(*) AS n FROM usage_events WHERE created_at>=? GROUP BY kind').bind(since).all(),
+          env.DB.prepare('SELECT platform, COUNT(*) AS n FROM usage_events WHERE kind=? AND created_at>=? AND platform IS NOT NULL GROUP BY platform').bind('import', since).all(),
+          env.DB.prepare('SELECT msg_bucket, COUNT(*) AS n FROM usage_events WHERE kind=? AND created_at>=? AND msg_bucket IS NOT NULL GROUP BY msg_bucket').bind('import', since).all()
+        ]);
+        const evList = evRows.results || [];
+        // 按天聚合活跃（服务端时区按 UTC 落桶，展示在前端）
+        const byDay = {};
+        for (const e of evList) {
+          const d = new Date(e.created_at).toISOString().slice(0, 10);
+          byDay[d] = (byDay[d] || 0) + 1;
+        }
+        const stats = {
+          users: (accAgg && accAgg.users) || 0,
+          logins: (accAgg && accAgg.logins) || 0,
+          partners: (accAgg && accAgg.partners) || 0,
+          firstSignupAt: (accAgg && accAgg.first_at) || null,
+          windowDays: days,
+          events: evList.length,
+          byKind: Object.fromEntries((kindRows.results || []).map((r) => [r.kind, r.n])),
+          byPlatform: Object.fromEntries((platformRows.results || []).map((r) => [r.platform || '未知', r.n])),
+          msgBuckets: Object.fromEntries((bucketRows.results || []).map((r) => [String(r.msg_bucket), r.n])),
+          byDay,
+          recent: evList.slice(0, 30).map((e) => ({ kind: e.kind, at: e.created_at }))
+        };
+        const mirror = url.searchParams.get('mirror') === '1'
+          ? await mirrorStats(env, stats)
+          : { mirrored: false, reason: 'not_requested' };
+        return json({ stats, mirror }, 200, origin);
       }
 
       /* ---------- sync partner count (metadata only) ---------- */

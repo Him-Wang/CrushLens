@@ -140,6 +140,37 @@ function loadApi() {
     ok(A.base() === 'https://custom.example.com', '用户自定义地址可覆盖默认值');
   }
 
+  section('匿名上报 opt-in 契约');
+  {
+    const ls = new Map();
+    globalThis.localStorage = {
+      getItem: (k) => (ls.has(k) ? ls.get(k) : null),
+      setItem: (k, v) => ls.set(k, String(v)),
+      removeItem: (k) => ls.delete(k)
+    };
+    const calls = [];
+    globalThis.fetch = (url, init) => {
+      calls.push({ url, body: JSON.parse(init.body) });
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    };
+    globalThis.location = { href: '' };
+    new Function('window', read('api.js'))(globalThis);
+    const A = globalThis.CLApi;
+    ok(A.telemetryEnabled() === false, '默认不参与匿名统计（opt-in）');
+    A.reportUsage('app_open');
+    ok(calls.length === 0, '未同意时 reportUsage 不发任何请求');
+    A.setTelemetry(true);
+    ok(A.telemetryEnabled() === true, '开启后 telemetryEnabled 为 true');
+    A.reportUsage('import', { platform: 'wechat', msgBucket: 137 });
+    ok(calls.length === 1 && /\/usage\/report$/.test(calls[0].url), '同意后上报到 /usage/report');
+    const b = calls[0].body;
+    ok(b.kind === 'import' && b.platform === 'wechat' && b.msgBucket === 137, '上报体含事件类型/平台/分桶');
+    ok(!('email' in b) && !('name' in b) && !('text' in b) && !('content' in b), '上报体不含邮箱/昵称/聊天内容');
+    A.setTelemetry(false);
+    A.reportUsage('import', { platform: 'qq' });
+    ok(calls.length === 1, '关闭后不再上报');
+  }
+
   console.log('\n────────────────────────────────────────────');
   console.log('结果：' + pass + ' 通过 / ' + fail + ' 失败');
   process.exit(fail === 0 ? 0 : 1);

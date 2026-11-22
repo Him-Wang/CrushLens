@@ -160,6 +160,8 @@
     if (Api && Api.configured() && profile) {
       const n = (await S.listPartners(acc.id)).length;
       Api.syncCounts(n).catch(() => { });
+      // opt-in 匿名上报：应用打开事件（不含身份/聊天内容）
+      Api.reportUsage && Api.reportUsage('app_open').catch(() => { });
     }
     await enter(acc);
     toast('已登录');
@@ -1325,6 +1327,14 @@
         source: parsed.detected || parsed.platform,
         fileName: state.fileName || (parsed.fileName || null)
       }, setP);
+
+      // opt-in 匿名上报：只报平台类型 + 分桶消息量，绝不报聊天内容/文件名/身份
+      if (Api && Api.reportUsage) {
+        Api.reportUsage('import', {
+          platform: String(parsed.detected || parsed.platform || '').slice(0, 24),
+          msgBucket: res && res.added
+        }).catch(() => { });
+      }
 
       await loadPartners();
       ptext.textContent = '正在计算曲线与复盘…';
@@ -2546,6 +2556,15 @@
         <div id="cInfo" class="small muted mt8"></div>
       </div>
 
+      <div class="card pad mb16">
+        <h3 style="font-size:14px;margin:0 0 4px">匿名使用统计</h3>
+        <p class="small muted mt6">帮助开发者了解有多少人在用、用了哪些功能。<b>只上报匿名元数据</b>（注册/登录/导入次数、平台类型、App 版本、时间），<b>绝不包含聊天内容、邮箱、昵称</b>。你可以随时关闭。</p>
+        <label class="row mt12" style="gap:8px;font-size:12.5px">
+          <input type="checkbox" id="telemetryOpt" ${Api && Api.telemetryEnabled && Api.telemetryEnabled() ? 'checked' : ''}>
+          参与匿名统计（默认关闭）
+        </label>
+      </div>
+
       <div class="card pad">
         <h3 style="font-size:14px;margin:0 0 4px">数据备份</h3>
         <p class="small muted mt6">导出 JSON 包含本机记录与账号元数据，明确不含 API key 与会话。</p>
@@ -2590,6 +2609,13 @@
       try { Api.setBase($('#cBase').value.trim()); toast('云端地址已保存'); }
       catch (e) { toast(e.message, 'warn'); }
     };
+    const tele = $('#telemetryOpt');
+    if (tele && Api && Api.setTelemetry) {
+      tele.onchange = () => {
+        Api.setTelemetry(tele.checked);
+        toast(tele.checked ? '已开启匿名统计，感谢支持' : '已关闭匿名统计，不再上报');
+      };
+    }
     $('#cMe').onclick = async () => {
       if (!Api.configured()) { $('#cInfo').textContent = '还没配置云端接口地址'; return; }
       try { const r = await Api.me(); $('#cInfo').textContent = '邮箱：' + r.account.email + ' · 登录 ' + r.account.login_count + ' 次 · 追踪对象 ' + r.account.partner_count + ' 个'; }

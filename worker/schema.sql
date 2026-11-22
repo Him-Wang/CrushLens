@@ -42,3 +42,23 @@ CREATE TABLE IF NOT EXISTS rate (
 );
 
 -- Failed-login lockout buckets reuse the `rate` table with prefix 'fail:'.
+
+-- Anonymous usage telemetry. NO chat content, NO email, NO name, NO account id.
+-- Server-side signup/login events are recorded automatically by the Worker;
+-- browser-reported events (imports etc.) require explicit user opt-in.
+CREATE TABLE IF NOT EXISTS usage_events (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind       TEXT NOT NULL,             -- signup|login|password_reset|import|app_open
+  platform   TEXT,                      -- only for import: wechat|qq|json|paste|...
+  msg_bucket INTEGER,                   -- bucketed message count, never exact volume
+  app_version TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_usage_kind_time ON usage_events(kind, created_at);
+CREATE INDEX IF NOT EXISTS idx_usage_time ON usage_events(created_at);
+
+-- 已有部署执行：wrangler d1 execute crushlens --file=worker/schema.sql --remote
+-- （CREATE TABLE IF NOT EXISTS 不会破坏现有数据。）
+
+-- GitHub 透明镜像：把上面的汇总快照推到仓库，token 只作为 Worker secret 存在，
+-- 绝不下发到浏览器。需要的 secret：GH_MIRROR_TOKEN、变量 GH_MIRROR_REPO=owner/repo。

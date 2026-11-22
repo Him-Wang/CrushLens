@@ -350,6 +350,17 @@
 
   /* ---------------- 总览 ---------------- */
   async function viewDash() {
+    // 真实服务端统计：白名单账号从 Worker D1 读，不再只看本机 IndexedDB
+    let live = null, mirrorInfo = null;
+    const Api = root.CLApi;
+    if (state.serverAdmin && Api && Api.adminStats) {
+      try {
+        const r = await Api.adminStats(14, false);
+        live = r && r.stats;
+      } catch (e) { /* 拉取失败则退回本机视图 */ }
+    }
+    if (live) return viewDashLive(live, mirrorInfo);
+
     const o = await S.adminOverview();
     const rows = await S.adminUserRows();
     const recent = (await S.raw.getAll('audit')).sort((a, b) => b.at - a.at).slice(0, 14);
@@ -425,6 +436,38 @@
     $('#main').innerHTML = html;
     $('#refresh').onclick = () => goto('dash');
     $$('[data-nav2]').forEach((b) => b.onclick = () => goto(b.dataset.nav2));
+  }
+
+  /* 真实服务端统计视图（来自 Worker D1，匿名元数据） */
+  function viewDashLive(stats, mirrorInfo) {
+    const kindLabel = { signup: '注册', login: '登录', password_reset: '重置密码', import: '导入', app_open: '打开应用' };
+    const dayKeys = Object.keys(stats.byDay || {}).sort().slice(-14);
+    const dayVals = dayKeys.map((d) => ({ label: d.slice(5), value: stats.byDay[d], color: cssVar('--acc-a', '#a5b4fc') }));
+    const kpi = (lab, val, unit, foot) => `<div class="card kpi"><div class="kpi-lab">${lab}</div>
+      <div class="kpi-val">${val}<small>${unit}</small></div><div class="kpi-foot">${foot || ''}</div></div>`;
+    const html = `
+      ${head('总览 · 真实服务端数据', `来自云端 D1 的匿名统计 · 窗口 ${stats.windowDays} 天`, `<button class="btn ghost sm" id="refresh">${icon('refresh', 14)} 刷新</button>`)}
+      <div class="card pad mb16" style="border-color:var(--ok)">
+        <div class="row" style="gap:8px"><span class="badge green">实时</span>
+          <span class="small">这是真实用户上报的数据，不再是本机测试数据。只含匿名元数据，无聊天内容/身份信息。</span></div>
+      </div>
+      <div class="grid g4 mb16">
+        ${kpi('注册用户', stats.users, '人', '<span class="muted tiny">云端账号总数</span>')}
+        ${kpi('累计登录', stats.logins, '次', '<span class="muted tiny">账号登录次数总和</span>')}
+        ${kpi('追踪对象', stats.partners, '个', '<span class="muted tiny">用户上报总数</span>')}
+        ${kpi('窗口内事件', stats.events, '条', `<span class="muted tiny">${stats.windowDays} 天内</span>`)}
+      </div>
+      <div class="grid g2 mb16">
+        <div class="card"><div class="card-head"><div><h3>事件类型</h3><div class="sub">注册 / 登录 / 导入等</div></div></div>
+          <div class="card-body">${bars(Object.entries(stats.byKind || {}).map(([k, n]) => ({ label: kindLabel[k] || k, value: n })), { height: 150 })}</div></div>
+        <div class="card"><div class="card-head"><div><h3>导入来源平台</h3><div class="sub">匿名上报</div></div></div>
+          <div class="card-body">${donut(stats.byPlatform || {}, { label: '导入次数' })}</div></div>
+      </div>
+      <div class="card"><div class="card-head"><div><h3>近 ${stats.windowDays} 天活跃</h3><div class="sub">按天聚合的上报事件</div></div></div>
+        <div class="card-body">${bars(dayVals, { height: 130 })}</div></div>
+    `;
+    $('#main').innerHTML = html;
+    $('#refresh').onclick = () => goto('dash');
   }
 
   /* ---------------- 用户与记录 ---------------- */
@@ -572,6 +615,14 @@
 
   /* ---------------- 使用分析 ---------------- */
   async function viewUsage() {
+    // 服务端白名单账号：优先展示真实数据，并提供 GitHub 镜像按钮
+    let live = null;
+    const Api = root.CLApi;
+    if (state.serverAdmin && Api && Api.adminStats) {
+      try { const r = await Api.adminStats(30, false); live = r && r.stats; } catch (e) { }
+    }
+    if (live) return viewUsageLive(live, Api);
+
     const o = await S.adminOverview();
     const rows = await S.adminUserRows();
     const batches = (await S.raw.getAll('batches')).sort((a, b) => b.createdAt - a.createdAt);
@@ -614,6 +665,47 @@
       </div>
     `;
     $('#main').innerHTML = html;
+  }
+
+  /* 真实服务端使用分析 + GitHub 镜像 */
+  function viewUsageLive(stats, Api) {
+    const kindLabel = { signup: '注册', login: '登录', password_reset: '重置密码', import: '导入', app_open: '打开应用' };
+    const bucketLabel = { '5': '<10', '25': '10–49', '75': '50–99', '250': '100–499', '750': '500–999', '1000': '1000+' };
+    const html = `
+      ${head('使用分析 · 真实服务端数据', `来自云端 D1 的匿名统计 · 窗口 ${stats.windowDays} 天`,
+        `<button class="btn ghost sm" id="mirBtn">${icon('refresh', 14)} 镜像到 GitHub</button>`)}
+      <div class="card pad mb16" style="border-color:var(--ok)">
+        <div class="row" style="gap:8px"><span class="badge green">真实</span>
+          <span class="small">下面全部来自服务端上报。<b>无聊天内容、无邮箱昵称</b>，消息量已分桶，平台仅记类型。</span></div>
+        <div id="mirMsg" class="small muted mt8"></div>
+      </div>
+      <div class="grid g3 mb16">
+        <div class="card"><div class="card-head"><div><h3>事件类型分布</h3><div class="sub">真实用户行为</div></div></div>
+          <div class="card-body">${donut(Object.fromEntries(Object.entries(stats.byKind || {}).map(([k, n]) => [kindLabel[k] || k, n])), { label: '事件数' })}</div></div>
+        <div class="card"><div class="card-head"><div><h3>导入平台</h3><div class="sub">匿名上报</div></div></div>
+          <div class="card-body">${donut(stats.byPlatform || {}, { label: '导入次数' })}</div></div>
+        <div class="card"><div class="card-head"><div><h3>单次消息量（分桶）</h3><div class="sub">不含精确值</div></div></div>
+          <div class="card-body">${bars(Object.entries(stats.msgBuckets || {}).map(([k, n]) => ({ label: bucketLabel[k] || k, value: n })), { height: 150 })}</div></div>
+      </div>
+      <div class="card"><div class="card-head"><div><h3>最近上报事件</h3><div class="sub">仅事件类型与时间，无身份</div></div></div>
+        <div class="card-body table-wrap"><table class="tb"><thead><tr><th>时间</th><th>事件</th></tr></thead>
+          <tbody>${(stats.recent || []).map((e) => `<tr><td class="small">${fmtDT(e.at)}</td><td class="small">${esc(kindLabel[e.kind] || e.kind)}</td></tr>`).join('') || '<tr><td colspan="2"><p class="muted small">还没有上报</p></td></tr>'}</tbody>
+        </table></div></div>
+    `;
+    $('#main').innerHTML = html;
+    const btn = $('#mirBtn');
+    if (btn) btn.onclick = async () => {
+      const msg = $('#mirMsg');
+      if (!(Api && Api.adminStats)) return;
+      btn.disabled = true; msg.textContent = '正在镜像到 GitHub 仓库…';
+      try {
+        const r = await Api.adminStats(30, true);
+        msg.textContent = r.mirror && r.mirror.mirrored
+          ? '已把汇总快照写入仓库的 cl-stats.json ✓'
+          : '镜像未生效：' + ((r.mirror && r.mirror.reason) || '未知') + '（需要在 Worker 配置 GH_MIRROR_TOKEN / GH_MIRROR_REPO）';
+      } catch (e) { msg.textContent = '镜像失败：' + e.message; }
+      finally { btn.disabled = false; }
+    };
   }
 
   /* ---------------- 权限管理 ---------------- */
